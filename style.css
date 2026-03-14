@@ -269,6 +269,42 @@ h2 {
   border-bottom: 1px solid var(--border);
 }
 
+/* --- Session tabs --- */
+
+#session-tabs {
+  display: none;
+  flex-shrink: 0;
+  padding: 0 24px;
+  border-bottom: 1px solid var(--border);
+  gap: 0;
+}
+
+#session-tabs.visible {
+  display: flex;
+}
+
+.session-tab {
+  background: none;
+  border: none;
+  border-bottom: 1px solid transparent;
+  color: var(--fg-dim);
+  font-family: var(--font);
+  font-size: 12px;
+  padding: 8px 16px;
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s;
+  margin-bottom: -1px;
+}
+
+.session-tab:hover {
+  color: var(--fg);
+}
+
+.session-tab.active {
+  color: var(--fg-bright);
+  border-bottom-color: var(--fg-bright);
+}
+
 /* --- Terminal --- */
 
 #terminal-container {

@@ -49,12 +49,18 @@ const state: {
 };
 
 // --- Terminal instances per sandbox ---
+// Keys are "sandboxName" for agent sessions, "sandboxName:shell" for shell sessions
 
 const activePtys = new Set<string>();
 const terminals = new Map<
   string,
   { term: InstanceType<typeof Terminal>; fitAddon: InstanceType<typeof FitAddon.FitAddon> }
 >();
+
+// Track which session tab is active per sandbox: "agent" or "shell"
+const activeSession = new Map<string, "agent" | "shell">();
+// Track which sandboxes have a shell connection
+const shellConnected = new Set<string>();
 
 // --- Helpers ---
 
@@ -99,7 +105,9 @@ function showView(name: ViewName): void {
 
   // Fit terminal when switching to sandbox detail
   if (name === "sandbox-detail" && state.selectedSandbox) {
-    const entry = terminals.get(state.selectedSandbox.name);
+    const session = activeSession.get(state.selectedSandbox.name) || "agent";
+    const key = terminalKey(state.selectedSandbox.name, session);
+    const entry = terminals.get(key);
     if (entry) {
       requestAnimationFrame(() => entry.fitAddon.fit());
     }
@@ -354,17 +362,41 @@ function getOrCreateTerminal(
   return entry;
 }
 
-function attachTerminalToContainer(name: string): void {
+function terminalKey(sandboxName: string, session: "agent" | "shell"): string {
+  return session === "shell" ? `${sandboxName}:shell` : sandboxName;
+}
+
+function attachTerminalToContainer(termKey: string): void {
   const container = getElementById("terminal-container");
   // Detach any existing terminal DOM
   container.innerHTML = "";
 
-  const { term, fitAddon } = getOrCreateTerminal(name);
+  const { term, fitAddon } = getOrCreateTerminal(termKey);
   term.open(container);
   requestAnimationFrame(() => {
     fitAddon.fit();
     term.focus();
   });
+}
+
+function updateSessionTabs(sandboxName: string): void {
+  const tabsEl = getElementById("session-tabs");
+  const session = activeSession.get(sandboxName) || "agent";
+  const hasShell = shellConnected.has(sandboxName);
+
+  // Show tabs only if shell is connected
+  tabsEl.classList.toggle("visible", hasShell);
+
+  tabsEl.querySelectorAll<HTMLElement>(".session-tab").forEach((el) => {
+    el.classList.toggle("active", el.dataset.session === session);
+  });
+}
+
+function switchSession(sandboxName: string, session: "agent" | "shell"): void {
+  activeSession.set(sandboxName, session);
+  const key = terminalKey(sandboxName, session);
+  attachTerminalToContainer(key);
+  updateSessionTabs(sandboxName);
 }
 
 // --- Sandbox detail ---
@@ -373,10 +405,15 @@ async function openSandboxDetail(sandbox: Sandbox): Promise<void> {
   state.selectedSandbox = sandbox;
   getElementById("detail-name").textContent = sandbox.name;
   getElementById("detail-agent-label").textContent = sandbox.agentId;
-  showView("sandbox-detail");
-  attachTerminalToContainer(sandbox.name);
 
-  // Spawn PTY if not already running for this sandbox
+  const session = activeSession.get(sandbox.name) || "agent";
+  const key = terminalKey(sandbox.name, session);
+
+  showView("sandbox-detail");
+  attachTerminalToContainer(key);
+  updateSessionTabs(sandbox.name);
+
+  // Spawn PTY if not already running for this sandbox (agent session)
   if (!activePtys.has(sandbox.name)) {
     const entry = terminals.get(sandbox.name);
     const cols = entry ? entry.term.cols : 80;
@@ -402,12 +439,23 @@ getElementById("btn-stop").addEventListener("click", async () => {
   const name = state.selectedSandbox.name;
   try {
     await window.plan8.container.stop({ name });
-    // Clean up terminal
-    const entry = terminals.get(name);
-    if (entry) {
-      entry.term.dispose();
+    // Clean up agent terminal
+    const agentEntry = terminals.get(name);
+    if (agentEntry) {
+      agentEntry.term.dispose();
       terminals.delete(name);
     }
+    // Clean up shell terminal
+    const shellKey = terminalKey(name, "shell");
+    const shellEntry = terminals.get(shellKey);
+    if (shellEntry) {
+      shellEntry.term.dispose();
+      terminals.delete(shellKey);
+    }
+    activePtys.delete(name);
+    activePtys.delete(shellKey);
+    shellConnected.delete(name);
+    activeSession.delete(name);
     state.sandboxes = state.sandboxes.filter((s) => s.name !== name);
     state.selectedSandbox = null;
     renderSandboxList();
@@ -417,6 +465,53 @@ getElementById("btn-stop").addEventListener("click", async () => {
     const entry = terminals.get(name);
     if (entry) entry.term.writeln(`\r\nerror: ${message}`);
   }
+});
+
+// --- Connect to machine (shell session) ---
+
+getElementById("btn-connect").addEventListener("click", async () => {
+  if (!state.selectedSandbox) return;
+  const name = state.selectedSandbox.name;
+  const shellKey = terminalKey(name, "shell");
+
+  if (shellConnected.has(name)) {
+    // Already connected, just switch to shell tab
+    switchSession(name, "shell");
+    return;
+  }
+
+  // Create shell terminal and spawn bash PTY
+  const { term, fitAddon } = getOrCreateTerminal(shellKey);
+  shellConnected.add(name);
+  activeSession.set(name, "shell");
+  attachTerminalToContainer(shellKey);
+  updateSessionTabs(name);
+
+  const cols = term.cols;
+  const rows = term.rows;
+
+  try {
+    await window.plan8.pty.spawn(
+      shellKey,
+      "/usr/local/bin/container",
+      ["exec", "-it", name, "bash"],
+      cols,
+      rows
+    );
+    activePtys.add(shellKey);
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err);
+    term.writeln(`\r\nerror: ${message}`);
+  }
+});
+
+// --- Session tab switching ---
+
+getElementById("session-tabs").addEventListener("click", (e: MouseEvent) => {
+  const target = (e.target as HTMLElement).closest(".session-tab") as HTMLElement | null;
+  if (!target || !state.selectedSandbox) return;
+  const session = target.dataset.session as "agent" | "shell";
+  if (session) switchSession(state.selectedSandbox.name, session);
 });
 
 // --- New sandbox modal ---
@@ -533,12 +628,38 @@ window.plan8.pty.onData((name: string, data: string) => {
 window.plan8.pty.onExit(async (name: string, _exitCode: number) => {
   activePtys.delete(name);
 
-  // Clean up terminal
+  // Check if this is a shell session exit (key ends with :shell)
+  if (name.endsWith(":shell")) {
+    const sandboxName = name.replace(/:shell$/, "");
+    const entry = terminals.get(name);
+    if (entry) {
+      entry.term.writeln("\r\n[shell disconnected]");
+    }
+    shellConnected.delete(sandboxName);
+    // Switch back to agent tab if we're viewing this shell
+    if (state.selectedSandbox?.name === sandboxName && activeSession.get(sandboxName) === "shell") {
+      switchSession(sandboxName, "agent");
+    }
+    updateSessionTabs(sandboxName);
+    return;
+  }
+
+  // Agent session exited — clean up everything
   const entry = terminals.get(name);
   if (entry) {
     entry.term.dispose();
     terminals.delete(name);
   }
+
+  // Also clean up shell terminal if it exists
+  const shellKey = `${name}:shell`;
+  const shellEntry = terminals.get(shellKey);
+  if (shellEntry) {
+    shellEntry.term.dispose();
+    terminals.delete(shellKey);
+  }
+  shellConnected.delete(name);
+  activeSession.delete(name);
 
   // Stop and remove container
   try {
@@ -569,7 +690,9 @@ window.addEventListener("resize", () => {
     state.currentView === "sandbox-detail" &&
     state.selectedSandbox
   ) {
-    const entry = terminals.get(state.selectedSandbox.name);
+    const session = activeSession.get(state.selectedSandbox.name) || "agent";
+    const key = terminalKey(state.selectedSandbox.name, session);
+    const entry = terminals.get(key);
     if (entry) entry.fitAddon.fit();
   }
 });
