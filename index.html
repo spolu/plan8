@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; style-src 'self' 'unsafe-inline'"
+    />
+    <title>plan8</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <div id="app">
+      <aside id="sidebar">
+        <div id="sidebar-header">
+          <span class="logo">plan8</span>
+          <button id="btn-new-sandbox" class="btn-icon" title="new sandbox">+</button>
+        </div>
+        <div id="sandbox-list"></div>
+        <div id="sidebar-footer">
+          <span id="nav-messages" class="sidebar-link">messages</span>
+        </div>
+      </aside>
+
+      <main id="panel">
+        <!-- setup view -->
+        <section id="view-setup" class="view">
+          <div class="centered-message">
+            <div class="setup">
+              <div class="setup-title">plan8</div>
+              <p id="setup-status" class="setup-text">checking environment...</p>
+              <div id="setup-commands"></div>
+              <p id="setup-detail" class="setup-detail"></p>
+            </div>
+          </div>
+        </section>
+
+        <!-- empty state -->
+        <section id="view-empty" class="view">
+          <div class="centered-message">no sandbox selected</div>
+        </section>
+
+        <!-- messages view -->
+        <section id="view-messages" class="view">
+          <div class="panel-header">
+            <h1>messages</h1>
+          </div>
+          <div class="panel-body">
+            <div id="message-list" class="list">
+              <div class="empty">no messages</div>
+            </div>
+          </div>
+        </section>
+
+        <!-- sandbox detail view -->
+        <section id="view-sandbox-detail" class="view">
+          <div class="panel-header">
+            <h1 id="detail-name"></h1>
+            <button id="btn-stop" class="btn btn-danger">stop</button>
+          </div>
+          <div class="panel-body">
+            <div class="detail-section">
+              <h2>prompt</h2>
+              <pre id="detail-prompt"></pre>
+            </div>
+            <div class="detail-section">
+              <h2>files</h2>
+              <div id="detail-files" class="list"></div>
+            </div>
+            <div class="detail-section">
+              <h2>interact</h2>
+              <div id="detail-output" class="output"></div>
+              <div class="input-row">
+                <input
+                  id="detail-input"
+                  type="text"
+                  placeholder="command..."
+                  autocomplete="off"
+                />
+              </div>
+            </div>
+          </div>
+        </section>
+      </main>
+    </div>
+    <script src="dist/renderer.js"></script>
+  </body>
+</html>
