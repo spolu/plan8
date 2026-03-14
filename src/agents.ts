@@ -19,6 +19,8 @@ Help the user with their tasks.
 
 const DEFAULT_DOCKERFILE = `FROM ubuntu:latest
 
+ARG AGENT_NAME=default
+
 RUN apt-get update && apt-get install -y \\
     curl \\
     git \\
@@ -37,6 +39,10 @@ RUN npm install -g @mariozechner/pi-coding-agent
 # Copy pi auth credentials if provided
 RUN mkdir -p /root/.pi/agent
 COPY auth.json /root/.pi/agent/auth.json
+
+# Set working directory to /user/{agent_name}
+RUN mkdir -p /user/\${AGENT_NAME}
+WORKDIR /user/\${AGENT_NAME}
 `;
 
 export function ensureDefaults(): void {
