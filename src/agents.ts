@@ -4,7 +4,7 @@ import os from "os";
 import type { AgentProfile } from "./plan8-api";
 
 const PLAN8_DIR = path.join(os.homedir(), ".plan8");
-const AGENTS_DIR = path.join(PLAN8_DIR, "agents");
+export const AGENTS_DIR = path.join(PLAN8_DIR, "agents");
 
 function ensureDir(dir: string): void {
   if (!fs.existsSync(dir)) {
@@ -23,7 +23,20 @@ RUN apt-get update && apt-get install -y \\
     curl \\
     git \\
     vim \\
+    ca-certificates \\
     && rm -rf /var/lib/apt/lists/*
+
+# Install Node.js 22 LTS
+RUN curl -fsSL https://deb.nodesource.com/setup_22.x | bash - \\
+    && apt-get install -y nodejs \\
+    && rm -rf /var/lib/apt/lists/*
+
+# Install pi coding agent
+RUN npm install -g @mariozechner/pi-coding-agent
+
+# Copy pi auth credentials if provided
+RUN mkdir -p /root/.pi/agent
+COPY auth.json /root/.pi/agent/auth.json
 `;
 
 export function ensureDefaults(): void {

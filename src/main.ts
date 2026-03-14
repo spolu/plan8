@@ -1,8 +1,10 @@
 import { app, BrowserWindow, ipcMain, shell } from "electron";
 import path from "path";
+import fs from "fs";
+import os from "os";
 import { execFile, spawn } from "child_process";
 import { updateElectronApp } from "update-electron-app";
-import type { ChildProcess } from "child_process";
+import * as pty from "node-pty";
 import type {
   SetupCheckResult,
   AgentProfile,
@@ -16,6 +18,7 @@ import {
   getAgent,
   saveAgent,
   deleteAgent,
+  AGENTS_DIR,
 } from "./agents";
 
 let mainWindow: BrowserWindow | null = null;
@@ -163,50 +166,98 @@ async function removeIfExists(name: string): Promise<void> {
   }
 }
 
+function spawnStreaming(
+  name: string,
+  command: string,
+  args: string[]
+): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const proc = spawn(command, args);
+    let output = "";
+    proc.stdout.on("data", (data: Buffer) => {
+      const chunk = data.toString();
+      output += chunk;
+      for (const line of chunk.split("\n")) {
+        const trimmed = line.trim();
+        if (trimmed) sendToRenderer("container:output", name, trimmed);
+      }
+    });
+    proc.stderr.on("data", (data: Buffer) => {
+      const chunk = data.toString();
+      output += chunk;
+      for (const line of chunk.split("\n")) {
+        const trimmed = line.trim();
+        if (trimmed) sendToRenderer("container:output", name, trimmed);
+      }
+    });
+    proc.on("close", (code) => {
+      if (code !== 0) {
+        return reject(new Error(output || `exited with code ${code}`));
+      }
+      resolve(output.trim());
+    });
+    proc.on("error", (err) => reject(err));
+  });
+}
+
 ipcMain.handle(
   "container:run",
   async (
     _event,
-    { image, name, volume }: ContainerRunOpts
+    { name, agentId, volume }: ContainerRunOpts
   ): Promise<string> => {
+    const imageName = `plan8-${agentId}`;
+    const dockerfileDir = path.join(AGENTS_DIR, agentId);
+
+    // Stage auth.json into build context if it exists locally
+    const localAuth = path.join(os.homedir(), ".pi", "agent", "auth.json");
+    const stagedAuth = path.join(dockerfileDir, "auth.json");
+    const hasAuth = fs.existsSync(localAuth);
+    if (hasAuth) {
+      fs.copyFileSync(localAuth, stagedAuth);
+    } else {
+      // Create empty file so COPY doesn't fail
+      fs.writeFileSync(stagedAuth, "{}");
+    }
+
+    // Build agent image from Dockerfile
+    sendToRenderer("container:output", name, "building agent image...");
+    try {
+      await spawnStreaming(name, CONTAINER, [
+        "build",
+        "-t",
+        imageName,
+        dockerfileDir,
+      ]);
+    } finally {
+      // Clean up staged auth from build context
+      try {
+        fs.unlinkSync(stagedAuth);
+      } catch {
+        // ignore
+      }
+    }
+
+    // Remove old container if exists
     await removeIfExists(name);
-    const args = ["run", "-d", "--init", "--name", name];
+
+    // Run container with built image
+    sendToRenderer("container:output", name, "starting container...");
+    const args = [
+      "run", "-d", "--init", "--name", name,
+      "--label", "plan8=true",
+      "--label", `plan8.agent=${agentId}`,
+    ];
     if (volume) args.push("--volume", volume);
-    args.push(image, "sleep", "infinity");
-    return new Promise((resolve, reject) => {
-      const proc = spawn(CONTAINER, args);
-      let output = "";
-      proc.stdout.on("data", (data: Buffer) => {
-        const chunk = data.toString();
-        output += chunk;
-        for (const line of chunk.split("\n")) {
-          const trimmed = line.trim();
-          if (trimmed) sendToRenderer("container:output", name, trimmed);
-        }
-      });
-      proc.stderr.on("data", (data: Buffer) => {
-        const chunk = data.toString();
-        output += chunk;
-        for (const line of chunk.split("\n")) {
-          const trimmed = line.trim();
-          if (trimmed) sendToRenderer("container:output", name, trimmed);
-        }
-      });
-      proc.on("close", (code) => {
-        if (code !== 0) {
-          return reject(new Error(output || `exited with code ${code}`));
-        }
-        resolve(output.trim());
-      });
-      proc.on("error", (err) => reject(err));
-    });
+    args.push(imageName, "sleep", "infinity");
+    return spawnStreaming(name, CONTAINER, args);
   }
 );
 
 ipcMain.handle(
   "container:stop",
   async (_event, { name }: ContainerStopOpts): Promise<string> => {
-    destroyShell(name);
+    destroyPty(name);
     return new Promise((resolve, reject) => {
       execFile(CONTAINER, ["stop", name], (err, stdout, stderr) => {
         if (err) return reject(new Error(stderr || err.message));
@@ -216,58 +267,56 @@ ipcMain.handle(
   }
 );
 
-// --- Persistent shell sessions ---
+// --- PTY sessions ---
 
-const shells = new Map<string, ChildProcess>();
+const ptys = new Map<string, pty.IPty>();
 
-function getOrCreateShell(name: string): ChildProcess {
-  let proc = shells.get(name);
-  if (proc && proc.exitCode === null) return proc;
+ipcMain.handle(
+  "pty:spawn",
+  async (
+    _event,
+    name: string,
+    command: string,
+    args: string[],
+    cols: number,
+    rows: number
+  ): Promise<void> => {
+    destroyPty(name);
 
-  proc = spawn(CONTAINER, ["exec", "-i", name, "/bin/bash", "-l"], {
-    stdio: ["pipe", "pipe", "pipe"],
-  });
+    const p = pty.spawn(command, args, {
+      name: "xterm-256color",
+      cols,
+      rows,
+      env: process.env,
+    });
 
-  const MARKER = `__plan8_done_${Date.now()}__`;
+    p.onData((data: string) => {
+      sendToRenderer("pty:data", name, data);
+    });
 
-  proc.stdout?.on("data", (data: Buffer) => {
-    const text = data.toString();
-    for (const line of text.split("\n")) {
-      const trimmed = line.trim();
-      if (!trimmed || trimmed === MARKER) continue;
-      sendToRenderer("container:output", name, trimmed);
-    }
-  });
+    p.onExit(({ exitCode }) => {
+      ptys.delete(name);
+      sendToRenderer("pty:exit", name, exitCode);
+    });
 
-  proc.stderr?.on("data", (data: Buffer) => {
-    const text = data.toString();
-    for (const line of text.split("\n")) {
-      const trimmed = line.trim();
-      if (trimmed) sendToRenderer("container:output", name, trimmed);
-    }
-  });
-
-  proc.on("close", () => {
-    shells.delete(name);
-  });
-
-  shells.set(name, proc);
-  proc.stdin?.write('export PS1=""\n');
-
-  return proc;
-}
-
-function destroyShell(name: string): void {
-  const proc = shells.get(name);
-  if (proc) {
-    proc.kill();
-    shells.delete(name);
+    ptys.set(name, p);
   }
-}
+);
 
-ipcMain.on("shell:send", (_event, name: string, command: string) => {
-  const proc = getOrCreateShell(name);
-  if (proc.stdin?.writable) {
-    proc.stdin.write(command + "\n");
-  }
+ipcMain.on("pty:write", (_event, name: string, data: string) => {
+  const p = ptys.get(name);
+  if (p) p.write(data);
 });
+
+ipcMain.on("pty:resize", (_event, name: string, cols: number, rows: number) => {
+  const p = ptys.get(name);
+  if (p) p.resize(cols, rows);
+});
+
+function destroyPty(name: string): void {
+  const p = ptys.get(name);
+  if (p) {
+    p.kill();
+    ptys.delete(name);
+  }
+}

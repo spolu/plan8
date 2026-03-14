@@ -29,9 +29,28 @@ const api: Plan8API = {
       );
     },
   },
-  shell: {
-    send: (name: string, command: string) =>
-      ipcRenderer.send("shell:send", name, command),
+  pty: {
+    spawn: (
+      name: string,
+      command: string,
+      args: string[],
+      cols: number,
+      rows: number
+    ) => ipcRenderer.invoke("pty:spawn", name, command, args, cols, rows),
+    write: (name: string, data: string) =>
+      ipcRenderer.send("pty:write", name, data),
+    resize: (name: string, cols: number, rows: number) =>
+      ipcRenderer.send("pty:resize", name, cols, rows),
+    onData: (callback: (name: string, data: string) => void) => {
+      ipcRenderer.on("pty:data", (_event, name: string, data: string) =>
+        callback(name, data)
+      );
+    },
+    onExit: (callback: (name: string, exitCode: number) => void) => {
+      ipcRenderer.on("pty:exit", (_event, name: string, exitCode: number) =>
+        callback(name, exitCode)
+      );
+    },
   },
 };
 

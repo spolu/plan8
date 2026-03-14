@@ -49,8 +49,18 @@ export interface Plan8API {
     stop: (opts: ContainerStopOpts) => Promise<string>;
     onOutput: (callback: (name: string, line: string) => void) => void;
   };
-  shell: {
-    send: (name: string, command: string) => void;
+  pty: {
+    spawn: (
+      name: string,
+      command: string,
+      args: string[],
+      cols: number,
+      rows: number
+    ) => Promise<void>;
+    write: (name: string, data: string) => void;
+    resize: (name: string, cols: number, rows: number) => void;
+    onData: (callback: (name: string, data: string) => void) => void;
+    onExit: (callback: (name: string, exitCode: number) => void) => void;
   };
 }
 

@@ -1,5 +1,9 @@
 /// <reference path="./plan8-api.d.ts" />
 
+// xterm.js loaded globally via script tags
+declare const Terminal: typeof import("xterm").Terminal;
+declare const FitAddon: { FitAddon: typeof import("@xterm/addon-fit").FitAddon };
+
 // --- Types ---
 
 interface Sandbox {
@@ -44,6 +48,14 @@ const state: {
   pollTimer: null,
 };
 
+// --- Terminal instances per sandbox ---
+
+const activePtys = new Set<string>();
+const terminals = new Map<
+  string,
+  { term: InstanceType<typeof Terminal>; fitAddon: InstanceType<typeof FitAddon.FitAddon> }
+>();
+
 // --- Helpers ---
 
 function getElementById<T extends HTMLElement>(id: string): T {
@@ -84,6 +96,14 @@ function showView(name: ViewName): void {
       "active",
       name === "settings" || name === "agent-editor"
     );
+
+  // Fit terminal when switching to sandbox detail
+  if (name === "sandbox-detail" && state.selectedSandbox) {
+    const entry = terminals.get(state.selectedSandbox.name);
+    if (entry) {
+      requestAnimationFrame(() => entry.fitAddon.fit());
+    }
+  }
 }
 
 // --- Setup flow ---
@@ -207,7 +227,13 @@ function renderAgentList(): void {
 
 getElementById("btn-new-agent").addEventListener("click", () => {
   openAgentEditor(
-    { id: "", name: "", description: "", prompt: "", dockerfile: "FROM ubuntu:latest\n" },
+    {
+      id: "",
+      name: "",
+      description: "",
+      prompt: "",
+      dockerfile: "FROM ubuntu:latest\n",
+    },
     true
   );
 });
@@ -246,8 +272,7 @@ getElementById("btn-save-agent").addEventListener("click", async () => {
   const description = getElementById<HTMLInputElement>(
     "editor-description"
   ).value.trim();
-  const prompt =
-    getElementById<HTMLTextAreaElement>("editor-prompt").value;
+  const prompt = getElementById<HTMLTextAreaElement>("editor-prompt").value;
   const dockerfile =
     getElementById<HTMLTextAreaElement>("editor-dockerfile").value;
 
@@ -259,7 +284,7 @@ getElementById("btn-save-agent").addEventListener("click", async () => {
 
 getElementById("btn-delete-agent").addEventListener("click", async () => {
   if (!state.editingAgent || !state.editingAgent.id) return;
-  if (state.editingAgent.id === "default") return; // protect default
+  if (state.editingAgent.id === "default") return;
   await window.plan8.agents.delete(state.editingAgent.id);
   await openSettings();
 });
@@ -286,55 +311,115 @@ function renderSandboxList(): void {
   });
 }
 
+// --- Terminal management ---
+
+function getOrCreateTerminal(
+  name: string
+): { term: InstanceType<typeof Terminal>; fitAddon: InstanceType<typeof FitAddon.FitAddon> } {
+  let entry = terminals.get(name);
+  if (entry) return entry;
+
+  const term = new Terminal({
+    cursorBlink: true,
+    fontSize: 13,
+    fontFamily: '"Berkeley Mono", "SF Mono", "Menlo", "Consolas", monospace',
+    theme: {
+      background: "#0a0a0a",
+      foreground: "#c8c8c8",
+      cursor: "#c8c8c8",
+      selectionBackground: "#333333",
+      black: "#0a0a0a",
+      brightBlack: "#555555",
+      white: "#c8c8c8",
+      brightWhite: "#e8e8e8",
+    },
+    allowProposedApi: true,
+  });
+
+  const fitAddon = new FitAddon.FitAddon();
+  term.loadAddon(fitAddon);
+
+  // Send keystrokes to PTY
+  term.onData((data: string) => {
+    window.plan8.pty.write(name, data);
+  });
+
+  // Send resize events
+  term.onResize(({ cols, rows }: { cols: number; rows: number }) => {
+    window.plan8.pty.resize(name, cols, rows);
+  });
+
+  entry = { term, fitAddon };
+  terminals.set(name, entry);
+  return entry;
+}
+
+function attachTerminalToContainer(name: string): void {
+  const container = getElementById("terminal-container");
+  // Detach any existing terminal DOM
+  container.innerHTML = "";
+
+  const { term, fitAddon } = getOrCreateTerminal(name);
+  term.open(container);
+  requestAnimationFrame(() => {
+    fitAddon.fit();
+    term.focus();
+  });
+}
+
 // --- Sandbox detail ---
 
-function openSandboxDetail(sandbox: Sandbox): void {
+async function openSandboxDetail(sandbox: Sandbox): Promise<void> {
   state.selectedSandbox = sandbox;
   getElementById("detail-name").textContent = sandbox.name;
   getElementById("detail-agent-label").textContent = sandbox.agentId;
-  getElementById("detail-prompt").textContent =
-    sandbox.prompt || "(no prompt)";
-  getElementById("detail-files").innerHTML =
-    '<div class="empty">no files</div>';
-  getElementById("detail-output").textContent = "";
   showView("sandbox-detail");
+  attachTerminalToContainer(sandbox.name);
+
+  // Spawn PTY if not already running for this sandbox
+  if (!activePtys.has(sandbox.name)) {
+    const entry = terminals.get(sandbox.name);
+    const cols = entry ? entry.term.cols : 80;
+    const rows = entry ? entry.term.rows : 24;
+    try {
+      await window.plan8.pty.spawn(
+        sandbox.name,
+        "/usr/local/bin/container",
+        ["exec", "-it", sandbox.name, "pi", "-c"],
+        cols,
+        rows
+      );
+      activePtys.add(sandbox.name);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      if (entry) entry.term.writeln(`\r\nerror: ${message}`);
+    }
+  }
 }
 
 getElementById("btn-stop").addEventListener("click", async () => {
   if (!state.selectedSandbox) return;
+  const name = state.selectedSandbox.name;
   try {
-    await window.plan8.container.stop({ name: state.selectedSandbox.name });
-    state.sandboxes = state.sandboxes.filter(
-      (s) => s.name !== state.selectedSandbox?.name
-    );
+    await window.plan8.container.stop({ name });
+    // Clean up terminal
+    const entry = terminals.get(name);
+    if (entry) {
+      entry.term.dispose();
+      terminals.delete(name);
+    }
+    state.sandboxes = state.sandboxes.filter((s) => s.name !== name);
     state.selectedSandbox = null;
     renderSandboxList();
     showView("empty");
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : String(err);
-    appendOutput(`error: ${message}`);
+    const entry = terminals.get(name);
+    if (entry) entry.term.writeln(`\r\nerror: ${message}`);
   }
 });
 
-// --- Shell input ---
-
-const detailInput = getElementById<HTMLInputElement>("detail-input");
-detailInput.addEventListener("keydown", (e: KeyboardEvent) => {
-  if (e.key !== "Enter") return;
-  const cmd = detailInput.value.trim();
-  if (!cmd || !state.selectedSandbox) return;
-  detailInput.value = "";
-  appendOutput(`$ ${cmd}`);
-  window.plan8.shell.send(state.selectedSandbox.name, cmd);
-});
-
-function appendOutput(text: string): void {
-  const el = getElementById("detail-output");
-  el.textContent += text + "\n";
-  el.scrollTop = el.scrollHeight;
-}
-
-// --- New sandbox modal (dropdown) ---
+// --- New sandbox modal ---
 
 getElementById("btn-new-sandbox").addEventListener("click", async () => {
   if (!state.ready) return;
@@ -391,15 +476,19 @@ function showNewSandboxModal(): void {
 
     const sandbox: Sandbox = {
       name,
-      image: "ubuntu:latest", // will come from Dockerfile later
+      image: "ubuntu:latest",
       agentId,
       prompt: agent.prompt,
     };
     state.sandboxes.push(sandbox);
     renderSandboxList();
+    // Mark PTY as active before opening detail to prevent reconnect spawn
+    activePtys.add(name);
     openSandboxDetail(sandbox);
     overlay.remove();
-    appendOutput("creating sandbox...");
+
+    const entry = terminals.get(name);
+    if (entry) entry.term.writeln("creating sandbox...");
 
     try {
       await window.plan8.container.run({
@@ -407,10 +496,25 @@ function showNewSandboxModal(): void {
         image: "ubuntu:latest",
         agentId,
       });
-      appendOutput("sandbox ready.");
+
+      if (entry) entry.term.writeln("sandbox ready. starting harness...\r\n");
+
+      // Spawn pi harness (or bash fallback) inside the container via PTY
+      const { cols, rows } = entry
+        ? { cols: entry.term.cols, rows: entry.term.rows }
+        : { cols: 80, rows: 24 };
+
+      await window.plan8.pty.spawn(
+        name,
+        "/usr/local/bin/container",
+        ["exec", "-it", name, "pi"],
+        cols,
+        rows
+      );
+      activePtys.add(name);
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : String(err);
-      appendOutput(`error: ${message}`);
+      if (entry) entry.term.writeln(`\r\nerror: ${message}`);
       state.sandboxes = state.sandboxes.filter((s) => s.name !== name);
       renderSandboxList();
     }
@@ -419,32 +523,89 @@ function showNewSandboxModal(): void {
   (overlay.querySelector("#modal-name") as HTMLInputElement).focus();
 }
 
+// --- PTY data routing ---
+
+window.plan8.pty.onData((name: string, data: string) => {
+  const entry = terminals.get(name);
+  if (entry) entry.term.write(data);
+});
+
+window.plan8.pty.onExit(async (name: string, _exitCode: number) => {
+  activePtys.delete(name);
+
+  // Clean up terminal
+  const entry = terminals.get(name);
+  if (entry) {
+    entry.term.dispose();
+    terminals.delete(name);
+  }
+
+  // Stop and remove container
+  try {
+    await window.plan8.container.stop({ name });
+  } catch {
+    // already stopped
+  }
+
+  state.sandboxes = state.sandboxes.filter((s) => s.name !== name);
+  if (state.selectedSandbox?.name === name) {
+    state.selectedSandbox = null;
+    showView("empty");
+  }
+  renderSandboxList();
+});
+
+// --- Container output (for run progress) ---
+
+window.plan8.container.onOutput((name: string, line: string) => {
+  const entry = terminals.get(name);
+  if (entry) entry.term.writeln(line);
+});
+
+// --- Resize handling ---
+
+window.addEventListener("resize", () => {
+  if (
+    state.currentView === "sandbox-detail" &&
+    state.selectedSandbox
+  ) {
+    const entry = terminals.get(state.selectedSandbox.name);
+    if (entry) entry.fitAddon.fit();
+  }
+});
+
 // --- Initial load ---
 
 async function refresh(): Promise<void> {
   try {
     const containers = await window.plan8.container.list();
     if (Array.isArray(containers)) {
-      state.sandboxes = containers.map((c) => ({
-        name: c.name ?? c.Name ?? "unknown",
-        image: c.image ?? c.Image ?? "",
-        agentId: "",
-        prompt: "",
-      }));
+      state.sandboxes = containers
+        .filter((c) => {
+          if (c.status !== "running") return false;
+          const labels = (c.configuration as Record<string, unknown>)
+            ?.labels as Record<string, string> | undefined;
+          return labels?.["plan8"] === "true";
+        })
+        .map((c) => {
+          const config = c.configuration as Record<string, unknown> | undefined;
+          const labels = config?.labels as Record<string, string> | undefined;
+          const id = (config?.id as string) ?? "unknown";
+          const imageRef = (config?.image as Record<string, unknown>)
+            ?.reference as string | undefined;
+          return {
+            name: id,
+            image: imageRef ?? "",
+            agentId: labels?.["plan8.agent"] ?? "",
+            prompt: "",
+          };
+        });
     }
   } catch {
     // container CLI not available
   }
   renderSandboxList();
 }
-
-// --- Container output streaming ---
-
-window.plan8.container.onOutput((name: string, line: string) => {
-  if (state.selectedSandbox && state.selectedSandbox.name === name) {
-    appendOutput(line);
-  }
-});
 
 // --- Boot ---
 

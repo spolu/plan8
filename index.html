@@ -7,6 +7,7 @@
       content="default-src 'self'; style-src 'self' 'unsafe-inline'"
     />
     <title>plan8</title>
+    <link rel="stylesheet" href="node_modules/xterm/css/xterm.css" />
     <link rel="stylesheet" href="style.css" />
   </head>
   <body>
@@ -90,31 +91,12 @@
             <span id="detail-agent-label" class="meta-label"></span>
             <button id="btn-stop" class="btn btn-danger">stop</button>
           </div>
-          <div class="panel-body">
-            <div class="detail-section">
-              <h2>prompt</h2>
-              <pre id="detail-prompt"></pre>
-            </div>
-            <div class="detail-section">
-              <h2>files</h2>
-              <div id="detail-files" class="list"></div>
-            </div>
-            <div class="detail-section">
-              <h2>interact</h2>
-              <div id="detail-output" class="output"></div>
-              <div class="input-row">
-                <input
-                  id="detail-input"
-                  type="text"
-                  placeholder="command..."
-                  autocomplete="off"
-                />
-              </div>
-            </div>
-          </div>
+          <div id="terminal-container"></div>
         </section>
       </main>
     </div>
+    <script src="node_modules/xterm/lib/xterm.js"></script>
+    <script src="node_modules/@xterm/addon-fit/lib/addon-fit.js"></script>
     <script src="dist/renderer.js"></script>
   </body>
 </html>

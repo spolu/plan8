@@ -59,7 +59,7 @@ body {
 }
 
 #sidebar-header {
-  padding: 44px 16px 12px;
+  padding: 52px 16px 12px;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -269,54 +269,21 @@ h2 {
   border-bottom: 1px solid var(--border);
 }
 
-/* --- Detail --- */
+/* --- Terminal --- */
 
-.detail-section {
-  margin-bottom: 24px;
-}
-
-pre {
-  color: var(--fg);
-  font-family: var(--font);
-  font-size: var(--font-size);
-  white-space: pre-wrap;
-  line-height: var(--line-height);
-}
-
-.output {
-  background: #050505;
-  border: 1px solid var(--border);
-  padding: 12px;
-  min-height: 120px;
-  max-height: 320px;
-  overflow-y: auto;
-  font-size: 12px;
-  line-height: 1.5;
-  margin-bottom: 8px;
-}
-
-.input-row {
-  display: flex;
-}
-
-.input-row input {
+#terminal-container {
   flex: 1;
-  background: none;
-  border: 1px solid var(--border);
-  color: var(--fg);
-  font-family: var(--font);
-  font-size: var(--font-size);
-  padding: 8px 12px;
-  outline: none;
-  transition: border-color 0.15s;
+  overflow: hidden;
+  background: var(--bg);
 }
 
-.input-row input:focus {
-  border-color: var(--fg-dim);
+#terminal-container .xterm {
+  height: 100%;
+  padding: 8px;
 }
 
-.input-row input::placeholder {
-  color: var(--fg-dim);
+#terminal-container .xterm-viewport {
+  background: var(--bg) !important;
 }
 
 /* --- Scrollbar --- */
