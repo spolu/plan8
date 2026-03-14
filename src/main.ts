@@ -247,7 +247,7 @@ ipcMain.handle(
     try {
       await spawnStreaming(name, CONTAINER, [
         "build",
-        "--build-arg", `AGENT_NAME=${agentId}`,
+        "--build-arg", `AGENT_NAME=${name}`,
         "-t",
         imageName,
         dockerfileDir,

@@ -422,7 +422,7 @@ async function openSandboxDetail(sandbox: Sandbox): Promise<void> {
       await window.plan8.pty.spawn(
         sandbox.name,
         "/usr/local/bin/container",
-        ["exec", "-it", "-w", `/user/${sandbox.agentId || "default"}`, sandbox.name, "pi", "-c"],
+        ["exec", "-it", "-w", `/user/${sandbox.name}`, sandbox.name, "pi", "-c"],
         cols,
         rows
       );
@@ -494,7 +494,7 @@ getElementById("btn-connect").addEventListener("click", async () => {
     await window.plan8.pty.spawn(
       shellKey,
       "/usr/local/bin/container",
-      ["exec", "-it", "-w", `/user/${state.selectedSandbox.agentId || "default"}`, name, "bash"],
+      ["exec", "-it", "-w", `/user/${name}`, name, "bash"],
       cols,
       rows
     );
@@ -604,7 +604,7 @@ function showNewSandboxModal(): void {
       await window.plan8.pty.spawn(
         name,
         "/usr/local/bin/container",
-        ["exec", "-it", "-w", `/user/${sandbox.agentId || "default"}`, name, "pi"],
+        ["exec", "-it", "-w", `/user/${name}`, name, "pi"],
         cols,
         rows
       );
