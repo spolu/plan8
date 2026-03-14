@@ -422,7 +422,7 @@ async function openSandboxDetail(sandbox: Sandbox): Promise<void> {
       await window.plan8.pty.spawn(
         sandbox.name,
         "/usr/local/bin/container",
-        ["exec", "-it", sandbox.name, "pi", "-c"],
+        ["exec", "-it", "-w", `/user/${sandbox.agentId || "default"}`, sandbox.name, "pi", "-c"],
         cols,
         rows
       );
@@ -494,7 +494,7 @@ getElementById("btn-connect").addEventListener("click", async () => {
     await window.plan8.pty.spawn(
       shellKey,
       "/usr/local/bin/container",
-      ["exec", "-it", name, "bash"],
+      ["exec", "-it", "-w", `/user/${state.selectedSandbox.agentId || "default"}`, name, "bash"],
       cols,
       rows
     );
@@ -559,9 +559,11 @@ function showNewSandboxModal(): void {
 
   const createBtn = overlay.querySelector("#modal-create") as HTMLButtonElement;
   createBtn.addEventListener("click", async () => {
-    const name = (
+    const rawName = (
       overlay.querySelector("#modal-name") as HTMLInputElement
     ).value.trim();
+    // Sanitize: lowercase, replace spaces/invalid chars with dashes
+    const name = rawName.toLowerCase().replace(/[^a-z0-9._-]/g, "-");
     const agentId = (overlay.querySelector("#modal-agent") as HTMLSelectElement)
       .value;
     if (!name || !agentId) return;
@@ -602,7 +604,7 @@ function showNewSandboxModal(): void {
       await window.plan8.pty.spawn(
         name,
         "/usr/local/bin/container",
-        ["exec", "-it", name, "pi"],
+        ["exec", "-it", "-w", `/user/${sandbox.agentId || "default"}`, name, "pi"],
         cols,
         rows
       );

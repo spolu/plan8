@@ -62,8 +62,10 @@ WORKDIR /user/\${AGENT_NAME}
 export function ensureDefaults(): void {
   ensureDir(AGENTS_DIR);
   const defaultDir = path.join(AGENTS_DIR, "default");
-  if (!fs.existsSync(defaultDir)) {
-    ensureDir(defaultDir);
+  const isNew = !fs.existsSync(defaultDir);
+  ensureDir(defaultDir);
+
+  if (isNew) {
     fs.writeFileSync(
       path.join(defaultDir, "settings.json"),
       JSON.stringify(
@@ -73,8 +75,10 @@ export function ensureDefaults(): void {
       )
     );
     fs.writeFileSync(path.join(defaultDir, "prompt.md"), DEFAULT_PROMPT);
-    fs.writeFileSync(path.join(defaultDir, "Dockerfile"), DEFAULT_DOCKERFILE);
   }
+
+  // Always sync the default Dockerfile with the latest template
+  fs.writeFileSync(path.join(defaultDir, "Dockerfile"), DEFAULT_DOCKERFILE);
 }
 
 export function listAgents(): AgentProfile[] {
