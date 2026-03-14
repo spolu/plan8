@@ -19,6 +19,8 @@ Help the user with their tasks.
 
 const DEFAULT_DOCKERFILE = `FROM ubuntu:latest
 
+ARG AGENT_NAME=default
+
 RUN apt-get update && apt-get install -y \\
     curl \\
     git \\
@@ -51,6 +53,10 @@ COPY .gitconfig /root/.gitconfig
 COPY .ssh/ /root/.ssh/
 RUN chmod 700 /root/.ssh && (chmod 600 /root/.ssh/* 2>/dev/null || true)
 COPY gh_hosts.yml /root/.config/gh/hosts.yml
+
+# Set working directory to /user/{agent_name}
+RUN mkdir -p /user/\${AGENT_NAME}
+WORKDIR /user/\${AGENT_NAME}
 `;
 
 export function ensureDefaults(): void {
