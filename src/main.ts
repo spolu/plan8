@@ -209,16 +209,38 @@ ipcMain.handle(
     const imageName = `plan8-${agentId}`;
     const dockerfileDir = path.join(AGENTS_DIR, agentId);
 
-    // Stage auth.json into build context if it exists locally
-    const localAuth = path.join(os.homedir(), ".pi", "agent", "auth.json");
-    const stagedAuth = path.join(dockerfileDir, "auth.json");
-    const hasAuth = fs.existsSync(localAuth);
-    if (hasAuth) {
-      fs.copyFileSync(localAuth, stagedAuth);
-    } else {
-      // Create empty file so COPY doesn't fail
-      fs.writeFileSync(stagedAuth, "{}");
+    // Stage credentials into build context
+    const staged: string[] = [];
+
+    function stageFile(src: string, dest: string, fallback: string): void {
+      const target = path.join(dockerfileDir, dest);
+      if (fs.existsSync(src)) {
+        fs.copyFileSync(src, target);
+      } else {
+        fs.writeFileSync(target, fallback);
+      }
+      staged.push(target);
     }
+
+    function stageDir(src: string, dest: string): void {
+      const target = path.join(dockerfileDir, dest);
+      if (fs.existsSync(src) && fs.statSync(src).isDirectory()) {
+        fs.cpSync(src, target, { recursive: true });
+      } else {
+        fs.mkdirSync(target, { recursive: true });
+      }
+      staged.push(target);
+    }
+
+    const home = os.homedir();
+    stageFile(path.join(home, ".pi", "agent", "auth.json"), "auth.json", "{}");
+    stageFile(path.join(home, ".gitconfig"), ".gitconfig", "");
+    stageDir(path.join(home, ".ssh"), ".ssh");
+    stageFile(
+      path.join(home, ".config", "gh", "hosts.yml"),
+      "gh_hosts.yml",
+      ""
+    );
 
     // Build agent image from Dockerfile
     sendToRenderer("container:output", name, "building agent image...");
@@ -230,11 +252,13 @@ ipcMain.handle(
         dockerfileDir,
       ]);
     } finally {
-      // Clean up staged auth from build context
-      try {
-        fs.unlinkSync(stagedAuth);
-      } catch {
-        // ignore
+      // Clean up all staged credentials from build context
+      for (const s of staged) {
+        try {
+          fs.rmSync(s, { recursive: true, force: true });
+        } catch {
+          // ignore
+        }
       }
     }
 
