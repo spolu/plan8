@@ -18,7 +18,7 @@
         </div>
         <div id="sandbox-list"></div>
         <div id="sidebar-footer">
-          <span id="nav-messages" class="sidebar-link">messages</span>
+          <span id="nav-settings" class="sidebar-link">settings</span>
         </div>
       </aside>
 
@@ -40,14 +40,45 @@
           <div class="centered-message">no sandbox selected</div>
         </section>
 
-        <!-- messages view -->
-        <section id="view-messages" class="view">
+        <!-- settings view -->
+        <section id="view-settings" class="view">
           <div class="panel-header">
-            <h1>messages</h1>
+            <h1>agents</h1>
+            <button id="btn-new-agent" class="btn">+ new agent</button>
           </div>
           <div class="panel-body">
-            <div id="message-list" class="list">
-              <div class="empty">no messages</div>
+            <div id="agent-list"></div>
+          </div>
+        </section>
+
+        <!-- agent editor view -->
+        <section id="view-agent-editor" class="view">
+          <div class="panel-header">
+            <button id="btn-back-settings" class="btn">&larr; back</button>
+            <h1 id="editor-title"></h1>
+            <button id="btn-save-agent" class="btn">save</button>
+            <button id="btn-delete-agent" class="btn btn-danger">delete</button>
+          </div>
+          <div class="panel-body">
+            <div class="field">
+              <label>id</label>
+              <input id="editor-id" type="text" placeholder="my-agent" autocomplete="off" />
+            </div>
+            <div class="field">
+              <label>name</label>
+              <input id="editor-name" type="text" placeholder="My Agent" autocomplete="off" />
+            </div>
+            <div class="field">
+              <label>description</label>
+              <input id="editor-description" type="text" placeholder="A brief description" autocomplete="off" />
+            </div>
+            <div class="field">
+              <label>prompt</label>
+              <textarea id="editor-prompt" rows="10" placeholder="you are an agent that..."></textarea>
+            </div>
+            <div class="field">
+              <label>dockerfile</label>
+              <textarea id="editor-dockerfile" rows="10" placeholder="FROM ubuntu:latest"></textarea>
             </div>
           </div>
         </section>
@@ -56,6 +87,7 @@
         <section id="view-sandbox-detail" class="view">
           <div class="panel-header">
             <h1 id="detail-name"></h1>
+            <span id="detail-agent-label" class="meta-label"></span>
             <button id="btn-stop" class="btn btn-danger">stop</button>
           </div>
           <div class="panel-body">

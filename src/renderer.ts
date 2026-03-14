@@ -5,25 +5,41 @@
 interface Sandbox {
   name: string;
   image: string;
+  agentId: string;
   prompt: string;
 }
 
-type ViewName = "setup" | "empty" | "messages" | "sandbox-detail";
+interface AgentProfile {
+  id: string;
+  name: string;
+  description: string;
+  prompt: string;
+  dockerfile: string;
+}
+
+type ViewName =
+  | "setup"
+  | "empty"
+  | "settings"
+  | "agent-editor"
+  | "sandbox-detail";
 
 // --- State ---
 
 const state: {
   sandboxes: Sandbox[];
-  messages: string[];
+  agents: AgentProfile[];
   currentView: ViewName;
   selectedSandbox: Sandbox | null;
+  editingAgent: AgentProfile | null;
   ready: boolean;
   pollTimer: ReturnType<typeof setInterval> | null;
 } = {
   sandboxes: [],
-  messages: [],
+  agents: [],
   currentView: "setup",
   selectedSandbox: null,
+  editingAgent: null,
   ready: false,
   pollTimer: null,
 };
@@ -41,7 +57,8 @@ function getElementById<T extends HTMLElement>(id: string): T {
 const views: Record<ViewName, HTMLElement> = {
   setup: getElementById("view-setup"),
   empty: getElementById("view-empty"),
-  messages: getElementById("view-messages"),
+  settings: getElementById("view-settings"),
+  "agent-editor": getElementById("view-agent-editor"),
   "sandbox-detail": getElementById("view-sandbox-detail"),
 };
 
@@ -61,8 +78,12 @@ function showView(name: ViewName): void {
         el.dataset.name === state.selectedSandbox.name
     );
   });
-  const msgNav = document.getElementById("nav-messages");
-  if (msgNav) msgNav.classList.toggle("active", name === "messages");
+  const settingsNav = document.getElementById("nav-settings");
+  if (settingsNav)
+    settingsNav.classList.toggle(
+      "active",
+      name === "settings" || name === "agent-editor"
+    );
 }
 
 // --- Setup flow ---
@@ -95,8 +116,6 @@ function startPolling(): void {
 
 function showSetupInstall(): void {
   setupStatus.textContent = "apple/container is not installed";
-  setupDetail.textContent =
-    "download and install the latest release, then come back here.";
   setupCommands.innerHTML = `<div class="setup-cmd-block"><p class="setup-cmd-label">download the installer from github:</p><a id="link-releases" class="setup-link">github.com/apple/container/releases</a></div>`;
   const link = getElementById<HTMLAnchorElement>("link-releases");
   link.addEventListener("click", (e) => {
@@ -135,9 +154,10 @@ async function runSetup(): Promise<void> {
   startPolling();
 }
 
-function enterApp(): void {
+async function enterApp(): Promise<void> {
   stopPolling();
   state.ready = true;
+  state.agents = await window.plan8.agents.list();
   showView("empty");
   getElementById("app").classList.add("loaded");
   refresh();
@@ -145,10 +165,103 @@ function enterApp(): void {
 
 // --- Navigation ---
 
-getElementById("nav-messages").addEventListener("click", () => {
+getElementById("nav-settings").addEventListener("click", () => {
   if (!state.ready) return;
   state.selectedSandbox = null;
-  showView("messages");
+  openSettings();
+});
+
+// --- Settings: agent list ---
+
+async function openSettings(): Promise<void> {
+  state.agents = await window.plan8.agents.list();
+  renderAgentList();
+  showView("settings");
+}
+
+function renderAgentList(): void {
+  const list = getElementById("agent-list");
+  if (state.agents.length === 0) {
+    list.innerHTML = '<div class="empty">no agents configured</div>';
+    return;
+  }
+  list.innerHTML = state.agents
+    .map(
+      (a) => `
+    <div class="list-item" data-id="${a.id}">
+      <div>
+        <span class="name">${a.name}</span>
+        <span class="meta">${a.description}</span>
+      </div>
+    </div>
+  `
+    )
+    .join("");
+  list.querySelectorAll<HTMLElement>(".list-item").forEach((el) => {
+    el.addEventListener("click", () => {
+      const agent = state.agents.find((a) => a.id === el.dataset.id);
+      if (agent) openAgentEditor(agent, false);
+    });
+  });
+}
+
+getElementById("btn-new-agent").addEventListener("click", () => {
+  openAgentEditor(
+    { id: "", name: "", description: "", prompt: "", dockerfile: "FROM ubuntu:latest\n" },
+    true
+  );
+});
+
+// --- Agent editor ---
+
+function openAgentEditor(agent: AgentProfile, isNew: boolean): void {
+  state.editingAgent = { ...agent };
+  const idInput = getElementById<HTMLInputElement>("editor-id");
+  getElementById("editor-title").textContent = isNew
+    ? "new agent"
+    : agent.name;
+  idInput.value = agent.id;
+  idInput.readOnly = !isNew;
+  idInput.classList.toggle("readonly", !isNew);
+  getElementById<HTMLInputElement>("editor-name").value = agent.name;
+  getElementById<HTMLInputElement>("editor-description").value =
+    agent.description;
+  getElementById<HTMLTextAreaElement>("editor-prompt").value = agent.prompt;
+  getElementById<HTMLTextAreaElement>("editor-dockerfile").value =
+    agent.dockerfile;
+
+  const deleteBtn = getElementById("btn-delete-agent");
+  deleteBtn.style.display = isNew ? "none" : "inline-block";
+
+  showView("agent-editor");
+}
+
+getElementById("btn-back-settings").addEventListener("click", () => {
+  openSettings();
+});
+
+getElementById("btn-save-agent").addEventListener("click", async () => {
+  const id = getElementById<HTMLInputElement>("editor-id").value.trim();
+  const name = getElementById<HTMLInputElement>("editor-name").value.trim();
+  const description = getElementById<HTMLInputElement>(
+    "editor-description"
+  ).value.trim();
+  const prompt =
+    getElementById<HTMLTextAreaElement>("editor-prompt").value;
+  const dockerfile =
+    getElementById<HTMLTextAreaElement>("editor-dockerfile").value;
+
+  if (!id || !name) return;
+
+  await window.plan8.agents.save({ id, name, description, prompt, dockerfile });
+  await openSettings();
+});
+
+getElementById("btn-delete-agent").addEventListener("click", async () => {
+  if (!state.editingAgent || !state.editingAgent.id) return;
+  if (state.editingAgent.id === "default") return; // protect default
+  await window.plan8.agents.delete(state.editingAgent.id);
+  await openSettings();
 });
 
 // --- Sidebar sandbox list ---
@@ -178,6 +291,7 @@ function renderSandboxList(): void {
 function openSandboxDetail(sandbox: Sandbox): void {
   state.selectedSandbox = sandbox;
   getElementById("detail-name").textContent = sandbox.name;
+  getElementById("detail-agent-label").textContent = sandbox.agentId;
   getElementById("detail-prompt").textContent =
     sandbox.prompt || "(no prompt)";
   getElementById("detail-files").innerHTML =
@@ -220,14 +334,22 @@ function appendOutput(text: string): void {
   el.scrollTop = el.scrollHeight;
 }
 
-// --- New sandbox modal ---
+// --- New sandbox modal (dropdown) ---
 
-getElementById("btn-new-sandbox").addEventListener("click", () => {
+getElementById("btn-new-sandbox").addEventListener("click", async () => {
   if (!state.ready) return;
+  state.agents = await window.plan8.agents.list();
   showNewSandboxModal();
 });
 
 function showNewSandboxModal(): void {
+  const options = state.agents
+    .map(
+      (a) =>
+        `<option value="${a.id}">${a.name} — ${a.description}</option>`
+    )
+    .join("");
+
   const overlay = document.createElement("div");
   overlay.className = "modal-overlay";
   overlay.innerHTML = `
@@ -235,15 +357,11 @@ function showNewSandboxModal(): void {
       <h2>new sandbox</h2>
       <div class="field">
         <label>name</label>
-        <input id="modal-name" type="text" placeholder="my-agent" autocomplete="off" />
+        <input id="modal-name" type="text" placeholder="my-sandbox" autocomplete="off" />
       </div>
       <div class="field">
-        <label>image</label>
-        <input id="modal-image" type="text" placeholder="ubuntu:latest" autocomplete="off" />
-      </div>
-      <div class="field">
-        <label>prompt</label>
-        <textarea id="modal-prompt" placeholder="you are an agent that..."></textarea>
+        <label>agent</label>
+        <select id="modal-agent">${options}</select>
       </div>
       <div class="modal-actions">
         <button class="btn" id="modal-cancel">cancel</button>
@@ -254,27 +372,29 @@ function showNewSandboxModal(): void {
   document.body.appendChild(overlay);
 
   const cancelBtn = overlay.querySelector("#modal-cancel") as HTMLButtonElement;
-  cancelBtn.addEventListener("click", () => {
-    overlay.remove();
-  });
+  cancelBtn.addEventListener("click", () => overlay.remove());
   overlay.addEventListener("click", (e: MouseEvent) => {
     if (e.target === overlay) overlay.remove();
   });
 
   const createBtn = overlay.querySelector("#modal-create") as HTMLButtonElement;
   createBtn.addEventListener("click", async () => {
-    const nameInput = overlay.querySelector("#modal-name") as HTMLInputElement;
-    const imageInput = overlay.querySelector("#modal-image") as HTMLInputElement;
-    const promptInput = overlay.querySelector(
-      "#modal-prompt"
-    ) as HTMLTextAreaElement;
-    const name = nameInput.value.trim();
-    const image = imageInput.value.trim();
-    const prompt = promptInput.value.trim();
-    if (!name || !image) return;
+    const name = (
+      overlay.querySelector("#modal-name") as HTMLInputElement
+    ).value.trim();
+    const agentId = (overlay.querySelector("#modal-agent") as HTMLSelectElement)
+      .value;
+    if (!name || !agentId) return;
 
-    // Add sandbox immediately, switch to detail, close modal
-    const sandbox: Sandbox = { name, image, prompt };
+    const agent = state.agents.find((a) => a.id === agentId);
+    if (!agent) return;
+
+    const sandbox: Sandbox = {
+      name,
+      image: "ubuntu:latest", // will come from Dockerfile later
+      agentId,
+      prompt: agent.prompt,
+    };
     state.sandboxes.push(sandbox);
     renderSandboxList();
     openSandboxDetail(sandbox);
@@ -282,19 +402,21 @@ function showNewSandboxModal(): void {
     appendOutput("creating sandbox...");
 
     try {
-      await window.plan8.container.run({ name, image });
+      await window.plan8.container.run({
+        name,
+        image: "ubuntu:latest",
+        agentId,
+      });
       appendOutput("sandbox ready.");
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : String(err);
       appendOutput(`error: ${message}`);
-      // Remove failed sandbox
       state.sandboxes = state.sandboxes.filter((s) => s.name !== name);
       renderSandboxList();
     }
   });
 
-  const nameField = overlay.querySelector("#modal-name") as HTMLInputElement;
-  nameField.focus();
+  (overlay.querySelector("#modal-name") as HTMLInputElement).focus();
 }
 
 // --- Initial load ---
@@ -306,6 +428,7 @@ async function refresh(): Promise<void> {
       state.sandboxes = containers.map((c) => ({
         name: c.name ?? c.Name ?? "unknown",
         image: c.image ?? c.Image ?? "",
+        agentId: "",
         prompt: "",
       }));
     }

@@ -5,10 +5,18 @@ import { updateElectronApp } from "update-electron-app";
 import type { ChildProcess } from "child_process";
 import type {
   SetupCheckResult,
+  AgentProfile,
   ContainerRunOpts,
   ContainerStopOpts,
   ContainerListEntry,
 } from "./plan8-api";
+import {
+  ensureDefaults,
+  listAgents,
+  getAgent,
+  saveAgent,
+  deleteAgent,
+} from "./agents";
 
 let mainWindow: BrowserWindow | null = null;
 
@@ -33,7 +41,10 @@ if (app.isPackaged) {
   updateElectronApp();
 }
 
-app.whenReady().then(createWindow);
+app.whenReady().then(() => {
+  ensureDefaults();
+  createWindow();
+});
 
 app.on("window-all-closed", () => {
   app.quit();
@@ -82,6 +93,28 @@ ipcMain.handle("setup:open-releases", async (): Promise<void> => {
   shell.openExternal("https://github.com/apple/container/releases/latest");
 });
 
+// --- Agent profiles ---
+
+ipcMain.handle(
+  "agents:list",
+  async (): Promise<AgentProfile[]> => listAgents()
+);
+
+ipcMain.handle(
+  "agents:get",
+  async (_event, id: string): Promise<AgentProfile> => getAgent(id)
+);
+
+ipcMain.handle(
+  "agents:save",
+  async (_event, agent: AgentProfile): Promise<void> => saveAgent(agent)
+);
+
+ipcMain.handle(
+  "agents:delete",
+  async (_event, id: string): Promise<void> => deleteAgent(id)
+);
+
 // --- Container management via apple/container CLI ---
 
 const CONTAINER = "/usr/local/bin/container";
@@ -108,7 +141,7 @@ function sendToRenderer(channel: string, ...args: unknown[]): void {
   }
 }
 
-function containerExec(args: string[]): Promise<string> {
+function containerCmd(args: string[]): Promise<string> {
   return new Promise((resolve, reject) => {
     execFile(CONTAINER, args, (err, stdout, stderr) => {
       if (err) return reject(new Error(stderr || err.message));
@@ -119,14 +152,14 @@ function containerExec(args: string[]): Promise<string> {
 
 async function removeIfExists(name: string): Promise<void> {
   try {
-    await containerExec(["stop", name]);
+    await containerCmd(["stop", name]);
   } catch {
-    // not running, that's fine
+    // not running
   }
   try {
-    await containerExec(["rm", name]);
+    await containerCmd(["rm", name]);
   } catch {
-    // doesn't exist, that's fine
+    // doesn't exist
   }
 }
 
@@ -195,7 +228,6 @@ function getOrCreateShell(name: string): ChildProcess {
     stdio: ["pipe", "pipe", "pipe"],
   });
 
-  // Use a marker to delimit command output
   const MARKER = `__plan8_done_${Date.now()}__`;
 
   proc.stdout?.on("data", (data: Buffer) => {
@@ -220,8 +252,6 @@ function getOrCreateShell(name: string): ChildProcess {
   });
 
   shells.set(name, proc);
-
-  // Disable prompt to avoid it showing up in output
   proc.stdin?.write('export PS1=""\n');
 
   return proc;

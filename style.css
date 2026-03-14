@@ -396,6 +396,61 @@ pre {
   border-color: var(--fg-dim);
 }
 
+.field select {
+  width: 100%;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  color: var(--fg);
+  font-family: var(--font);
+  font-size: var(--font-size);
+  padding: 8px 12px;
+  outline: none;
+  appearance: none;
+  cursor: pointer;
+}
+
+.field select:focus {
+  border-color: var(--fg-dim);
+}
+
+.field select option {
+  background: var(--bg);
+  color: var(--fg);
+}
+
+.field input.readonly {
+  color: var(--fg-dim);
+  border-color: var(--border);
+}
+
+.meta-label {
+  color: var(--fg-dim);
+  font-size: 12px;
+  margin-right: auto;
+}
+
+.list-item .meta {
+  display: block;
+}
+
+#agent-list {
+  border-top: 1px solid var(--border);
+}
+
+#agent-list .list-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--border);
+  cursor: pointer;
+  transition: color 0.15s;
+}
+
+#agent-list .list-item:hover {
+  color: var(--fg-bright);
+}
+
 .modal-actions {
   display: flex;
   gap: 8px;
