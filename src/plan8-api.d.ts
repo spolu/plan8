@@ -15,16 +15,6 @@ export interface ContainerStopOpts {
   name: string;
 }
 
-export interface ContainerExecOpts {
-  name: string;
-  command: string[];
-}
-
-export interface ContainerExecResult {
-  stdout: string;
-  stderr: string;
-}
-
 export interface ContainerListEntry {
   name?: string;
   Name?: string;
@@ -42,7 +32,10 @@ export interface Plan8API {
     list: () => Promise<ContainerListEntry[]>;
     run: (opts: ContainerRunOpts) => Promise<string>;
     stop: (opts: ContainerStopOpts) => Promise<string>;
-    exec: (opts: ContainerExecOpts) => Promise<ContainerExecResult>;
+    onOutput: (callback: (name: string, line: string) => void) => void;
+  };
+  shell: {
+    send: (name: string, command: string) => void;
   };
 }
 

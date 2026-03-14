@@ -202,26 +202,16 @@ getElementById("btn-stop").addEventListener("click", async () => {
   }
 });
 
-// --- Exec ---
+// --- Shell input ---
 
 const detailInput = getElementById<HTMLInputElement>("detail-input");
-detailInput.addEventListener("keydown", async (e: KeyboardEvent) => {
+detailInput.addEventListener("keydown", (e: KeyboardEvent) => {
   if (e.key !== "Enter") return;
   const cmd = detailInput.value.trim();
   if (!cmd || !state.selectedSandbox) return;
   detailInput.value = "";
   appendOutput(`$ ${cmd}`);
-  try {
-    const result = await window.plan8.container.exec({
-      name: state.selectedSandbox.name,
-      command: cmd.split(" "),
-    });
-    if (result.stdout) appendOutput(result.stdout);
-    if (result.stderr) appendOutput(result.stderr);
-  } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : String(err);
-    appendOutput(`error: ${message}`);
-  }
+  window.plan8.shell.send(state.selectedSandbox.name, cmd);
 });
 
 function appendOutput(text: string): void {
@@ -283,16 +273,23 @@ function showNewSandboxModal(): void {
     const prompt = promptInput.value.trim();
     if (!name || !image) return;
 
+    // Add sandbox immediately, switch to detail, close modal
+    const sandbox: Sandbox = { name, image, prompt };
+    state.sandboxes.push(sandbox);
+    renderSandboxList();
+    openSandboxDetail(sandbox);
+    overlay.remove();
+    appendOutput("creating sandbox...");
+
     try {
       await window.plan8.container.run({ name, image });
-      state.sandboxes.push({ name, image, prompt });
-      renderSandboxList();
-      openSandboxDetail(state.sandboxes[state.sandboxes.length - 1]);
-      overlay.remove();
+      appendOutput("sandbox ready.");
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : String(err);
       appendOutput(`error: ${message}`);
-      overlay.remove();
+      // Remove failed sandbox
+      state.sandboxes = state.sandboxes.filter((s) => s.name !== name);
+      renderSandboxList();
     }
   });
 
@@ -317,6 +314,14 @@ async function refresh(): Promise<void> {
   }
   renderSandboxList();
 }
+
+// --- Container output streaming ---
+
+window.plan8.container.onOutput((name: string, line: string) => {
+  if (state.selectedSandbox && state.selectedSandbox.name === name) {
+    appendOutput(line);
+  }
+});
 
 // --- Boot ---
 

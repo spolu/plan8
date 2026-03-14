@@ -1,12 +1,12 @@
 import { app, BrowserWindow, ipcMain, shell } from "electron";
 import path from "path";
-import { execFile } from "child_process";
+import { execFile, spawn } from "child_process";
+import { updateElectronApp } from "update-electron-app";
+import type { ChildProcess } from "child_process";
 import type {
   SetupCheckResult,
   ContainerRunOpts,
   ContainerStopOpts,
-  ContainerExecOpts,
-  ContainerExecResult,
   ContainerListEntry,
 } from "./plan8-api";
 
@@ -14,8 +14,8 @@ let mainWindow: BrowserWindow | null = null;
 
 function createWindow(): void {
   mainWindow = new BrowserWindow({
-    width: 960,
-    height: 640,
+    width: 1200,
+    height: 800,
     backgroundColor: "#0a0a0a",
     titleBarStyle: "hiddenInset",
     trafficLightPosition: { x: 16, y: 18 },
@@ -27,6 +27,10 @@ function createWindow(): void {
   });
 
   mainWindow.loadFile(path.join(__dirname, "..", "index.html"));
+}
+
+if (app.isPackaged) {
+  updateElectronApp();
 }
 
 app.whenReady().then(createWindow);
@@ -98,20 +102,70 @@ ipcMain.handle(
   }
 );
 
+function sendToRenderer(channel: string, ...args: unknown[]): void {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send(channel, ...args);
+  }
+}
+
+function containerExec(args: string[]): Promise<string> {
+  return new Promise((resolve, reject) => {
+    execFile(CONTAINER, args, (err, stdout, stderr) => {
+      if (err) return reject(new Error(stderr || err.message));
+      resolve(stdout.trim());
+    });
+  });
+}
+
+async function removeIfExists(name: string): Promise<void> {
+  try {
+    await containerExec(["stop", name]);
+  } catch {
+    // not running, that's fine
+  }
+  try {
+    await containerExec(["rm", name]);
+  } catch {
+    // doesn't exist, that's fine
+  }
+}
+
 ipcMain.handle(
   "container:run",
   async (
     _event,
     { image, name, volume }: ContainerRunOpts
   ): Promise<string> => {
-    const args = ["run", "--name", name];
+    await removeIfExists(name);
+    const args = ["run", "-d", "--init", "--name", name];
     if (volume) args.push("--volume", volume);
-    args.push(image);
+    args.push(image, "sleep", "infinity");
     return new Promise((resolve, reject) => {
-      execFile(CONTAINER, args, (err, stdout, stderr) => {
-        if (err) return reject(new Error(stderr || err.message));
-        resolve(stdout.trim());
+      const proc = spawn(CONTAINER, args);
+      let output = "";
+      proc.stdout.on("data", (data: Buffer) => {
+        const chunk = data.toString();
+        output += chunk;
+        for (const line of chunk.split("\n")) {
+          const trimmed = line.trim();
+          if (trimmed) sendToRenderer("container:output", name, trimmed);
+        }
       });
+      proc.stderr.on("data", (data: Buffer) => {
+        const chunk = data.toString();
+        output += chunk;
+        for (const line of chunk.split("\n")) {
+          const trimmed = line.trim();
+          if (trimmed) sendToRenderer("container:output", name, trimmed);
+        }
+      });
+      proc.on("close", (code) => {
+        if (code !== 0) {
+          return reject(new Error(output || `exited with code ${code}`));
+        }
+        resolve(output.trim());
+      });
+      proc.on("error", (err) => reject(err));
     });
   }
 );
@@ -119,6 +173,7 @@ ipcMain.handle(
 ipcMain.handle(
   "container:stop",
   async (_event, { name }: ContainerStopOpts): Promise<string> => {
+    destroyShell(name);
     return new Promise((resolve, reject) => {
       execFile(CONTAINER, ["stop", name], (err, stdout, stderr) => {
         if (err) return reject(new Error(stderr || err.message));
@@ -128,21 +183,61 @@ ipcMain.handle(
   }
 );
 
-ipcMain.handle(
-  "container:exec",
-  async (
-    _event,
-    { name, command }: ContainerExecOpts
-  ): Promise<ContainerExecResult> => {
-    return new Promise((resolve, reject) => {
-      execFile(
-        CONTAINER,
-        ["exec", name, ...command],
-        (err, stdout, stderr) => {
-          if (err) return reject(new Error(stderr || err.message));
-          resolve({ stdout, stderr });
-        }
-      );
-    });
+// --- Persistent shell sessions ---
+
+const shells = new Map<string, ChildProcess>();
+
+function getOrCreateShell(name: string): ChildProcess {
+  let proc = shells.get(name);
+  if (proc && proc.exitCode === null) return proc;
+
+  proc = spawn(CONTAINER, ["exec", "-i", name, "/bin/bash", "-l"], {
+    stdio: ["pipe", "pipe", "pipe"],
+  });
+
+  // Use a marker to delimit command output
+  const MARKER = `__plan8_done_${Date.now()}__`;
+
+  proc.stdout?.on("data", (data: Buffer) => {
+    const text = data.toString();
+    for (const line of text.split("\n")) {
+      const trimmed = line.trim();
+      if (!trimmed || trimmed === MARKER) continue;
+      sendToRenderer("container:output", name, trimmed);
+    }
+  });
+
+  proc.stderr?.on("data", (data: Buffer) => {
+    const text = data.toString();
+    for (const line of text.split("\n")) {
+      const trimmed = line.trim();
+      if (trimmed) sendToRenderer("container:output", name, trimmed);
+    }
+  });
+
+  proc.on("close", () => {
+    shells.delete(name);
+  });
+
+  shells.set(name, proc);
+
+  // Disable prompt to avoid it showing up in output
+  proc.stdin?.write('export PS1=""\n');
+
+  return proc;
+}
+
+function destroyShell(name: string): void {
+  const proc = shells.get(name);
+  if (proc) {
+    proc.kill();
+    shells.delete(name);
   }
-);
+}
+
+ipcMain.on("shell:send", (_event, name: string, command: string) => {
+  const proc = getOrCreateShell(name);
+  if (proc.stdin?.writable) {
+    proc.stdin.write(command + "\n");
+  }
+});

@@ -59,7 +59,6 @@ body {
 }
 
 #sidebar-header {
-  -webkit-app-region: drag;
   padding: 44px 16px 12px;
   display: flex;
   align-items: center;
@@ -176,12 +175,6 @@ body {
   padding: 16px 24px;
   border-bottom: 1px solid var(--border);
   flex-shrink: 0;
-  -webkit-app-region: drag;
-}
-
-.panel-header h1,
-.panel-header .btn {
-  -webkit-app-region: no-drag;
 }
 
 .panel-body {
