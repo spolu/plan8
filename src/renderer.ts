@@ -18,6 +18,7 @@ interface Profile {
   description: string;
   prompt: string;
   dockerfile: string;
+  setup: string;
 }
 
 type ViewName =
@@ -291,6 +292,7 @@ getElementById("btn-new-profile").addEventListener("click", () => {
       description: "",
       prompt: "",
       dockerfile: "FROM ubuntu:latest\n",
+      setup: "",
     },
     true
   );
@@ -312,6 +314,7 @@ function openProfileEditor(profile: Profile, isNew: boolean): void {
   getElementById<HTMLTextAreaElement>("editor-prompt").value = profile.prompt;
   getElementById<HTMLTextAreaElement>("editor-dockerfile").value =
     profile.dockerfile;
+  getElementById<HTMLTextAreaElement>("editor-setup").value = profile.setup;
 
   const deleteBtn = getElementById("btn-delete-profile");
   deleteBtn.style.display = isNew ? "none" : "inline-block";
@@ -331,10 +334,11 @@ getElementById("btn-save-profile").addEventListener("click", async () => {
   const prompt = getElementById<HTMLTextAreaElement>("editor-prompt").value;
   const dockerfile =
     getElementById<HTMLTextAreaElement>("editor-dockerfile").value;
+  const setup = getElementById<HTMLTextAreaElement>("editor-setup").value;
 
   if (!id) return;
 
-  await window.plan8.profiles.save({ id, description, prompt, dockerfile });
+  await window.plan8.profiles.save({ id, description, prompt, dockerfile, setup });
   await openSettings();
 });
 

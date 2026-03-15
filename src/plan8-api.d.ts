@@ -10,6 +10,7 @@ export interface Profile {
   description: string;
   prompt: string;
   dockerfile: string;
+  setup: string;
 }
 
 export interface ContainerRunOpts {

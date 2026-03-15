@@ -245,7 +245,21 @@ ipcMain.handle(
     ];
     if (volume) args.push("--volume", volume);
     args.push(imageName, "sleep", "infinity");
-    return spawnStreaming(name, CONTAINER, args);
+    await spawnStreaming(name, CONTAINER, args);
+
+    // Run setup.sh inside the container if the profile defines one
+    const setupPath = path.join(dockerfileDir, "setup.sh");
+    if (fs.existsSync(setupPath)) {
+      const setupContent = fs.readFileSync(setupPath, "utf-8").trim();
+      if (setupContent) {
+        sendToRenderer("container:output", name, "running setup script...");
+        await spawnStreaming(name, CONTAINER, [
+          "exec", name, "bash", "-c", setupContent,
+        ]);
+      }
+    }
+
+    return "";
   }
 );
 

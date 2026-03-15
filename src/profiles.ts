@@ -18,6 +18,13 @@ You have access to the filesystem and can run commands.
 Help the user with their tasks.
 `;
 
+const DEFAULT_SETUP = `#!/bin/bash
+# This script runs inside the container after volumes are mounted.
+# Use it to clone repos, install project deps, etc.
+# Example:
+#   cd /agent && git clone git@github.com:org/repo.git
+`;
+
 const DEFAULT_DOCKERFILE = `FROM ubuntu:latest
 
 RUN apt-get update && apt-get install -y \\
@@ -59,6 +66,7 @@ export function ensureDefaults(): void {
       )
     );
     fs.writeFileSync(path.join(defaultDir, "prompt.md"), DEFAULT_PROMPT);
+    fs.writeFileSync(path.join(defaultDir, "setup.sh"), DEFAULT_SETUP);
   }
 
   // Always sync the default Dockerfile with the latest template
@@ -85,6 +93,7 @@ export function getProfile(id: string): Profile {
   const settingsPath = path.join(dir, "settings.json");
   const promptPath = path.join(dir, "prompt.md");
   const dockerfilePath = path.join(dir, "Dockerfile");
+  const setupPath = path.join(dir, "setup.sh");
 
   const settings = JSON.parse(fs.readFileSync(settingsPath, "utf-8")) as {
     description: string;
@@ -95,12 +104,16 @@ export function getProfile(id: string): Profile {
   const dockerfile = fs.existsSync(dockerfilePath)
     ? fs.readFileSync(dockerfilePath, "utf-8")
     : "";
+  const setup = fs.existsSync(setupPath)
+    ? fs.readFileSync(setupPath, "utf-8")
+    : "";
 
   return {
     id,
     description: settings.description,
     prompt,
     dockerfile,
+    setup,
   };
 }
 
@@ -117,6 +130,7 @@ export function saveProfile(profile: Profile): void {
   );
   fs.writeFileSync(path.join(dir, "prompt.md"), profile.prompt);
   fs.writeFileSync(path.join(dir, "Dockerfile"), profile.dockerfile);
+  fs.writeFileSync(path.join(dir, "setup.sh"), profile.setup);
 }
 
 export function linkSkills(profileId: string, agentDir: string): void {

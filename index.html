@@ -77,6 +77,10 @@
               <label>dockerfile</label>
               <textarea id="editor-dockerfile" rows="10" placeholder="FROM ubuntu:latest"></textarea>
             </div>
+            <div class="field">
+              <label>setup (runs after container start, with volumes mounted)</label>
+              <textarea id="editor-setup" rows="10" placeholder="#!/bin/bash&#10;cd /agent && git clone git@github.com:org/repo.git"></textarea>
+            </div>
           </div>
         </section>
 
