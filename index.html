@@ -15,9 +15,9 @@
       <aside id="sidebar">
         <div id="sidebar-header">
           <span class="logo">plan8</span>
-          <button id="btn-new-sandbox" class="btn-icon" title="new sandbox">+</button>
+          <button id="btn-new-agent" class="btn-icon" title="new agent">+</button>
         </div>
-        <div id="sandbox-list"></div>
+        <div id="agent-list"></div>
         <div id="sidebar-footer">
           <span id="nav-settings" class="sidebar-link">settings</span>
         </div>
@@ -38,7 +38,7 @@
 
         <!-- empty state -->
         <section id="view-empty" class="view">
-          <div class="centered-message">no sandbox selected</div>
+          <div class="centered-message">no agent selected</div>
         </section>
 
         <!-- settings view -->
@@ -80,17 +80,14 @@
           </div>
         </section>
 
-        <!-- sandbox detail view -->
-        <section id="view-sandbox-detail" class="view">
+        <!-- agent detail view -->
+        <section id="view-agent-detail" class="view">
           <div class="panel-header">
             <h1 id="detail-name"></h1>
             <span id="detail-profile-label" class="meta-label"></span>
-            <button id="btn-connect" class="btn">connect</button>
+            <button id="btn-agent" class="btn btn-session active">agent</button>
+            <button id="btn-sandbox" class="btn btn-session">sandbox</button>
             <button id="btn-stop" class="btn btn-danger">stop</button>
-          </div>
-          <div id="session-tabs">
-            <button class="session-tab active" data-session="agent">agent</button>
-            <button class="session-tab" data-session="shell">shell</button>
           </div>
           <div id="terminal-container"></div>
         </section>

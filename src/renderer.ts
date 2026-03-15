@@ -6,7 +6,7 @@ declare const FitAddon: { FitAddon: typeof import("@xterm/addon-fit").FitAddon }
 
 // --- Types ---
 
-interface Sandbox {
+interface Agent {
   name: string;
   image: string;
   profileId: string;
@@ -25,30 +25,30 @@ type ViewName =
   | "empty"
   | "settings"
   | "profile-editor"
-  | "sandbox-detail";
+  | "agent-detail";
 
 // --- State ---
 
 const state: {
-  sandboxes: Sandbox[];
+  agents: Agent[];
   profiles: Profile[];
   currentView: ViewName;
-  selectedSandbox: Sandbox | null;
+  selectedAgent: Agent | null;
   editingProfile: Profile | null;
   ready: boolean;
   pollTimer: ReturnType<typeof setInterval> | null;
 } = {
-  sandboxes: [],
+  agents: [],
   profiles: [],
   currentView: "setup",
-  selectedSandbox: null,
+  selectedAgent: null,
   editingProfile: null,
   ready: false,
   pollTimer: null,
 };
 
-// --- Terminal instances per sandbox ---
-// Keys are "sandboxName" for agent sessions, "sandboxName:shell" for shell sessions
+// --- Terminal instances per agent ---
+// Keys are "agentName" for agent sessions, "agentName:shell" for shell sessions
 
 const activePtys = new Set<string>();
 const terminals = new Map<
@@ -56,9 +56,9 @@ const terminals = new Map<
   { term: InstanceType<typeof Terminal>; fitAddon: InstanceType<typeof FitAddon.FitAddon> }
 >();
 
-// Track which session tab is active per sandbox: "agent" or "shell"
+// Track which session button is active per agent: "agent" or "shell"
 const activeSession = new Map<string, "agent" | "shell">();
-// Track which sandboxes have a shell connection
+// Track which agents have a shell connection
 const shellConnected = new Set<string>();
 
 // --- Helpers ---
@@ -76,7 +76,7 @@ const views: Record<ViewName, HTMLElement> = {
   empty: getElementById("view-empty"),
   settings: getElementById("view-settings"),
   "profile-editor": getElementById("view-profile-editor"),
-  "sandbox-detail": getElementById("view-sandbox-detail"),
+  "agent-detail": getElementById("view-agent-detail"),
 };
 
 function showView(name: ViewName): void {
@@ -87,12 +87,12 @@ function showView(name: ViewName): void {
   const appEl = getElementById("app");
   appEl.classList.toggle("setup-mode", name === "setup");
 
-  document.querySelectorAll<HTMLElement>(".sandbox-tab").forEach((el) => {
+  document.querySelectorAll<HTMLElement>(".agent-tab").forEach((el) => {
     el.classList.toggle(
       "active",
-      name === "sandbox-detail" &&
-        state.selectedSandbox !== null &&
-        el.dataset.name === state.selectedSandbox.name
+      name === "agent-detail" &&
+        state.selectedAgent !== null &&
+        el.dataset.name === state.selectedAgent.name
     );
   });
   const settingsNav = document.getElementById("nav-settings");
@@ -102,10 +102,10 @@ function showView(name: ViewName): void {
       name === "settings" || name === "profile-editor"
     );
 
-  // Fit terminal when switching to sandbox detail
-  if (name === "sandbox-detail" && state.selectedSandbox) {
-    const session = activeSession.get(state.selectedSandbox.name) || "agent";
-    const key = terminalKey(state.selectedSandbox.name, session);
+  // Fit terminal when switching to agent detail
+  if (name === "agent-detail" && state.selectedAgent) {
+    const session = currentSession(state.selectedAgent.name);
+    const key = terminalKey(state.selectedAgent.name, session);
     const entry = terminals.get(key);
     if (entry) {
       requestAnimationFrame(() => entry.fitAddon.fit());
@@ -194,7 +194,7 @@ async function enterApp(): Promise<void> {
 
 getElementById("nav-settings").addEventListener("click", () => {
   if (!state.ready) return;
-  state.selectedSandbox = null;
+  state.selectedAgent = null;
   openSettings();
 });
 
@@ -293,24 +293,24 @@ getElementById("btn-delete-profile").addEventListener("click", async () => {
   await openSettings();
 });
 
-// --- Sidebar sandbox list ---
+// --- Sidebar agent list ---
 
-function renderSandboxList(): void {
-  const list = getElementById("sandbox-list");
-  if (state.sandboxes.length === 0) {
-    list.innerHTML = '<div class="sandbox-empty">no sandboxes</div>';
+function renderAgentList(): void {
+  const list = getElementById("agent-list");
+  if (state.agents.length === 0) {
+    list.innerHTML = '<div class="agent-empty">no agents</div>';
     return;
   }
-  list.innerHTML = state.sandboxes
+  list.innerHTML = state.agents
     .map(
-      (s) =>
-        `<button class="sandbox-tab${state.selectedSandbox && state.selectedSandbox.name === s.name ? " active" : ""}" data-name="${s.name}">${s.name}</button>`
+      (agent) =>
+        `<button class="agent-tab${state.selectedAgent && state.selectedAgent.name === agent.name ? " active" : ""}" data-name="${agent.name}">${agent.name}</button>`
     )
     .join("");
-  list.querySelectorAll<HTMLButtonElement>(".sandbox-tab").forEach((el) => {
+  list.querySelectorAll<HTMLButtonElement>(".agent-tab").forEach((el) => {
     el.addEventListener("click", () => {
-      const sandbox = state.sandboxes.find((s) => s.name === el.dataset.name);
-      if (sandbox) openSandboxDetail(sandbox);
+      const agent = state.agents.find((agent) => agent.name === el.dataset.name);
+      if (agent) openAgentDetail(agent);
     });
   });
 }
@@ -358,8 +358,17 @@ function getOrCreateTerminal(
   return entry;
 }
 
-function terminalKey(sandboxName: string, session: "agent" | "shell"): string {
-  return session === "shell" ? `${sandboxName}:shell` : sandboxName;
+function terminalKey(agentName: string, session: "agent" | "shell"): string {
+  return session === "shell" ? `${agentName}:shell` : agentName;
+}
+
+function currentSession(agentName: string): "agent" | "shell" {
+  const session = activeSession.get(agentName) || "agent";
+  if (session === "shell" && !shellConnected.has(agentName)) {
+    activeSession.set(agentName, "agent");
+    return "agent";
+  }
+  return session;
 }
 
 function attachTerminalToContainer(termKey: string): void {
@@ -375,54 +384,48 @@ function attachTerminalToContainer(termKey: string): void {
   });
 }
 
-function updateSessionTabs(sandboxName: string): void {
-  const tabsEl = getElementById("session-tabs");
-  const session = activeSession.get(sandboxName) || "agent";
-  const hasShell = shellConnected.has(sandboxName);
-
-  // Show tabs only if shell is connected
-  tabsEl.classList.toggle("visible", hasShell);
-
-  tabsEl.querySelectorAll<HTMLElement>(".session-tab").forEach((el) => {
-    el.classList.toggle("active", el.dataset.session === session);
-  });
+function updateSessionButtons(agentName: string): void {
+  const session = currentSession(agentName);
+  getElementById("btn-agent").classList.toggle("active", session === "agent");
+  getElementById("btn-sandbox").classList.toggle("active", session === "shell");
 }
 
-function switchSession(sandboxName: string, session: "agent" | "shell"): void {
-  activeSession.set(sandboxName, session);
-  const key = terminalKey(sandboxName, session);
+function switchSession(agentName: string, session: "agent" | "shell"): void {
+  if (session === "shell" && !shellConnected.has(agentName)) return;
+  activeSession.set(agentName, session);
+  const key = terminalKey(agentName, session);
   attachTerminalToContainer(key);
-  updateSessionTabs(sandboxName);
+  updateSessionButtons(agentName);
 }
 
-// --- Sandbox detail ---
+// --- Agent detail ---
 
-async function openSandboxDetail(sandbox: Sandbox): Promise<void> {
-  state.selectedSandbox = sandbox;
-  getElementById("detail-name").textContent = sandbox.name;
-  getElementById("detail-profile-label").textContent = sandbox.profileId;
+async function openAgentDetail(agent: Agent): Promise<void> {
+  state.selectedAgent = agent;
+  getElementById("detail-name").textContent = agent.name;
+  getElementById("detail-profile-label").textContent = agent.profileId;
 
-  const session = activeSession.get(sandbox.name) || "agent";
-  const key = terminalKey(sandbox.name, session);
+  const session = currentSession(agent.name);
+  const key = terminalKey(agent.name, session);
 
-  showView("sandbox-detail");
+  showView("agent-detail");
   attachTerminalToContainer(key);
-  updateSessionTabs(sandbox.name);
+  updateSessionButtons(agent.name);
 
-  // Spawn PTY if not already running for this sandbox (agent session)
-  if (!activePtys.has(sandbox.name)) {
-    const entry = terminals.get(sandbox.name);
+  // Spawn PTY if not already running for this agent (agent session)
+  if (!activePtys.has(agent.name)) {
+    const entry = terminals.get(agent.name);
     const cols = entry ? entry.term.cols : 80;
     const rows = entry ? entry.term.rows : 24;
     try {
       await window.plan8.pty.spawn(
-        sandbox.name,
+        agent.name,
         "/usr/local/bin/container",
-        ["exec", "-it", "-w", `/agent/${sandbox.name}`, sandbox.name, "pi", "-c"],
+        ["exec", "-it", "-w", `/agent/${agent.name}`, agent.name, "pi", "-c"],
         cols,
         rows
       );
-      activePtys.add(sandbox.name);
+      activePtys.add(agent.name);
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : String(err);
       if (entry) entry.term.writeln(`\r\nerror: ${message}`);
@@ -431,8 +434,8 @@ async function openSandboxDetail(sandbox: Sandbox): Promise<void> {
 }
 
 getElementById("btn-stop").addEventListener("click", async () => {
-  if (!state.selectedSandbox) return;
-  const name = state.selectedSandbox.name;
+  if (!state.selectedAgent) return;
+  const name = state.selectedAgent.name;
   try {
     await window.plan8.container.stop({ name });
     // Clean up agent terminal
@@ -452,9 +455,9 @@ getElementById("btn-stop").addEventListener("click", async () => {
     activePtys.delete(shellKey);
     shellConnected.delete(name);
     activeSession.delete(name);
-    state.sandboxes = state.sandboxes.filter((s) => s.name !== name);
-    state.selectedSandbox = null;
-    renderSandboxList();
+    state.agents = state.agents.filter((agent) => agent.name !== name);
+    state.selectedAgent = null;
+    renderAgentList();
     showView("empty");
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : String(err);
@@ -463,25 +466,29 @@ getElementById("btn-stop").addEventListener("click", async () => {
   }
 });
 
-// --- Connect to machine (shell session) ---
+getElementById("btn-agent").addEventListener("click", () => {
+  if (!state.selectedAgent) return;
+  switchSession(state.selectedAgent.name, "agent");
+});
 
-getElementById("btn-connect").addEventListener("click", async () => {
-  if (!state.selectedSandbox) return;
-  const name = state.selectedSandbox.name;
+// --- Sandbox button (shell session) ---
+
+getElementById("btn-sandbox").addEventListener("click", async () => {
+  if (!state.selectedAgent) return;
+  const name = state.selectedAgent.name;
   const shellKey = terminalKey(name, "shell");
 
   if (shellConnected.has(name)) {
-    // Already connected, just switch to shell tab
     switchSession(name, "shell");
     return;
   }
 
   // Create shell terminal and spawn bash PTY
-  const { term, fitAddon } = getOrCreateTerminal(shellKey);
+  const { term } = getOrCreateTerminal(shellKey);
   shellConnected.add(name);
   activeSession.set(name, "shell");
   attachTerminalToContainer(shellKey);
-  updateSessionTabs(name);
+  updateSessionButtons(name);
 
   const cols = term.cols;
   const rows = term.rows;
@@ -501,24 +508,15 @@ getElementById("btn-connect").addEventListener("click", async () => {
   }
 });
 
-// --- Session tab switching ---
+// --- New agent modal ---
 
-getElementById("session-tabs").addEventListener("click", (e: MouseEvent) => {
-  const target = (e.target as HTMLElement).closest(".session-tab") as HTMLElement | null;
-  if (!target || !state.selectedSandbox) return;
-  const session = target.dataset.session as "agent" | "shell";
-  if (session) switchSession(state.selectedSandbox.name, session);
-});
-
-// --- New sandbox modal ---
-
-getElementById("btn-new-sandbox").addEventListener("click", async () => {
+getElementById("btn-new-agent").addEventListener("click", async () => {
   if (!state.ready) return;
   state.profiles = await window.plan8.profiles.list();
-  showNewSandboxModal();
+  showNewAgentModal();
 });
 
-function showNewSandboxModal(): void {
+function showNewAgentModal(): void {
   const options = state.profiles
     .map(
       (p) =>
@@ -530,10 +528,10 @@ function showNewSandboxModal(): void {
   overlay.className = "modal-overlay";
   overlay.innerHTML = `
     <div class="modal">
-      <h2>new sandbox</h2>
+      <h2>new agent</h2>
       <div class="field">
         <label>name</label>
-        <input id="modal-name" type="text" placeholder="my-sandbox" autocomplete="off" />
+        <input id="modal-name" type="text" placeholder="my-agent" autocomplete="off" />
       </div>
       <div class="field">
         <label>profile</label>
@@ -567,21 +565,21 @@ function showNewSandboxModal(): void {
     const profile = state.profiles.find((p) => p.id === profileId);
     if (!profile) return;
 
-    const sandbox: Sandbox = {
+    const agent: Agent = {
       name,
       image: "ubuntu:latest",
       profileId,
       prompt: profile.prompt,
     };
-    state.sandboxes.push(sandbox);
-    renderSandboxList();
+    state.agents.push(agent);
+    renderAgentList();
     // Mark PTY as active before opening detail to prevent reconnect spawn
     activePtys.add(name);
-    openSandboxDetail(sandbox);
+    openAgentDetail(agent);
     overlay.remove();
 
     const entry = terminals.get(name);
-    if (entry) entry.term.writeln("creating sandbox...");
+    if (entry) entry.term.writeln("creating agent...");
 
     try {
       await window.plan8.container.run({
@@ -590,7 +588,7 @@ function showNewSandboxModal(): void {
         profileId,
       });
 
-      if (entry) entry.term.writeln("sandbox ready. starting harness...\r\n");
+      if (entry) entry.term.writeln("agent ready. starting harness...\r\n");
 
       // Spawn pi harness (or bash fallback) inside the container via PTY
       const { cols, rows } = entry
@@ -608,8 +606,8 @@ function showNewSandboxModal(): void {
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : String(err);
       if (entry) entry.term.writeln(`\r\nerror: ${message}`);
-      state.sandboxes = state.sandboxes.filter((s) => s.name !== name);
-      renderSandboxList();
+      state.agents = state.agents.filter((agent) => agent.name !== name);
+      renderAgentList();
     }
   });
 
@@ -628,17 +626,18 @@ window.plan8.pty.onExit(async (name: string, _exitCode: number) => {
 
   // Check if this is a shell session exit (key ends with :shell)
   if (name.endsWith(":shell")) {
-    const sandboxName = name.replace(/:shell$/, "");
+    const agentName = name.replace(/:shell$/, "");
     const entry = terminals.get(name);
     if (entry) {
       entry.term.writeln("\r\n[shell disconnected]");
     }
-    shellConnected.delete(sandboxName);
-    // Switch back to agent tab if we're viewing this shell
-    if (state.selectedSandbox?.name === sandboxName && activeSession.get(sandboxName) === "shell") {
-      switchSession(sandboxName, "agent");
+    shellConnected.delete(agentName);
+    if (activeSession.get(agentName) === "shell") {
+      activeSession.set(agentName, "agent");
     }
-    updateSessionTabs(sandboxName);
+    if (state.selectedAgent?.name === agentName) {
+      switchSession(agentName, "agent");
+    }
     return;
   }
 
@@ -666,12 +665,12 @@ window.plan8.pty.onExit(async (name: string, _exitCode: number) => {
     // already stopped
   }
 
-  state.sandboxes = state.sandboxes.filter((s) => s.name !== name);
-  if (state.selectedSandbox?.name === name) {
-    state.selectedSandbox = null;
+  state.agents = state.agents.filter((agent) => agent.name !== name);
+  if (state.selectedAgent?.name === name) {
+    state.selectedAgent = null;
     showView("empty");
   }
-  renderSandboxList();
+  renderAgentList();
 });
 
 // --- Container output (for run progress) ---
@@ -685,11 +684,11 @@ window.plan8.container.onOutput((name: string, line: string) => {
 
 window.addEventListener("resize", () => {
   if (
-    state.currentView === "sandbox-detail" &&
-    state.selectedSandbox
+    state.currentView === "agent-detail" &&
+    state.selectedAgent
   ) {
-    const session = activeSession.get(state.selectedSandbox.name) || "agent";
-    const key = terminalKey(state.selectedSandbox.name, session);
+    const session = currentSession(state.selectedAgent.name);
+    const key = terminalKey(state.selectedAgent.name, session);
     const entry = terminals.get(key);
     if (entry) entry.fitAddon.fit();
   }
@@ -701,7 +700,7 @@ async function refresh(): Promise<void> {
   try {
     const containers = await window.plan8.container.list();
     if (Array.isArray(containers)) {
-      state.sandboxes = containers
+      state.agents = containers
         .filter((c) => {
           if (c.status !== "running") return false;
           const labels = (c.configuration as Record<string, unknown>)
@@ -725,7 +724,7 @@ async function refresh(): Promise<void> {
   } catch {
     // container CLI not available
   }
-  renderSandboxList();
+  renderAgentList();
 }
 
 // --- Boot ---
