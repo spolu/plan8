@@ -546,16 +546,16 @@ function showNewAgentModal(): void {
   document.body.appendChild(overlay);
 
   const cancelBtn = overlay.querySelector("#modal-cancel") as HTMLButtonElement;
+  const createBtn = overlay.querySelector("#modal-create") as HTMLButtonElement;
+  const nameInput = overlay.querySelector("#modal-name") as HTMLInputElement;
+
   cancelBtn.addEventListener("click", () => overlay.remove());
   overlay.addEventListener("click", (e: MouseEvent) => {
     if (e.target === overlay) overlay.remove();
   });
 
-  const createBtn = overlay.querySelector("#modal-create") as HTMLButtonElement;
-  createBtn.addEventListener("click", async () => {
-    const rawName = (
-      overlay.querySelector("#modal-name") as HTMLInputElement
-    ).value.trim();
+  const submitNewAgent = async (): Promise<void> => {
+    const rawName = nameInput.value.trim();
     // Sanitize: lowercase, replace spaces/invalid chars with dashes
     const name = rawName.toLowerCase().replace(/[^a-z0-9._-]/g, "-");
     const profileId = (overlay.querySelector("#modal-profile") as HTMLSelectElement)
@@ -609,9 +609,18 @@ function showNewAgentModal(): void {
       state.agents = state.agents.filter((agent) => agent.name !== name);
       renderAgentList();
     }
+  };
+
+  createBtn.addEventListener("click", () => {
+    void submitNewAgent();
+  });
+  nameInput.addEventListener("keydown", (e: KeyboardEvent) => {
+    if (e.key !== "Enter") return;
+    e.preventDefault();
+    void submitNewAgent();
   });
 
-  (overlay.querySelector("#modal-name") as HTMLInputElement).focus();
+  nameInput.focus();
 }
 
 // --- PTY data routing ---
