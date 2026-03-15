@@ -42,10 +42,8 @@ COPY .gitconfig /root/.gitconfig
 COPY .ssh/ /root/.ssh/
 RUN chmod 700 /root/.ssh && (chmod 600 /root/.ssh/* 2>/dev/null || true)
 
-# Set working directory to /user/{agent_name}
-ARG AGENT_NAME=default
-RUN mkdir -p /user/\${AGENT_NAME}
-WORKDIR /user/\${AGENT_NAME}
+# Working directory (volume mounted from host, subdirectory created at runtime)
+WORKDIR /agent
 `;
 
 export function ensureDefaults(): void {

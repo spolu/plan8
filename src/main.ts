@@ -242,7 +242,6 @@ ipcMain.handle(
     try {
       await spawnStreaming(name, CONTAINER, [
         "build",
-        "--build-arg", `AGENT_NAME=${name}`,
         "-t",
         imageName,
         dockerfileDir,
@@ -261,12 +260,20 @@ ipcMain.handle(
     // Remove old container if exists
     await removeIfExists(name);
 
+    // Ensure host directory for shared filesystem
+    const fsRoot = path.join(os.homedir(), ".plan8", "fs", "agent");
+    const agentSubdir = path.join(fsRoot, name);
+    if (!fs.existsSync(agentSubdir)) {
+      fs.mkdirSync(agentSubdir, { recursive: true });
+    }
+
     // Run container with built image
     sendToRenderer("container:output", name, "starting container...");
     const args = [
       "run", "-d", "--init", "--name", name,
       "--label", "plan8=true",
       "--label", `plan8.profile=${profileId}`,
+      "--volume", `${fsRoot}:/agent`,
     ];
     if (volume) args.push("--volume", volume);
     args.push(imageName, "sleep", "infinity");
