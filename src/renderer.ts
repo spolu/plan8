@@ -69,6 +69,36 @@ function getElementById<T extends HTMLElement>(id: string): T {
   return el as T;
 }
 
+function isEditableTarget(target: EventTarget | null): boolean {
+  if (!(target instanceof HTMLElement)) return false;
+
+  // xterm uses a hidden textarea for terminal input; app shortcuts should
+  // still work when terminal focus is active.
+  if (target.closest("#terminal-container")) return false;
+
+  if (target instanceof HTMLInputElement) return true;
+  if (target instanceof HTMLTextAreaElement) return true;
+  if (target instanceof HTMLSelectElement) return true;
+  return target.isContentEditable;
+}
+
+async function switchAgentByOffset(offset: number): Promise<void> {
+  if (!state.ready || state.agents.length === 0) return;
+
+  const currentIndex = state.selectedAgent
+    ? state.agents.findIndex((agent) => agent.name === state.selectedAgent?.name)
+    : -1;
+
+  const startIndex = currentIndex >= 0 ? currentIndex : 0;
+  const nextIndex = startIndex + offset;
+  if (nextIndex < 0 || nextIndex >= state.agents.length) return;
+
+  const agent = state.agents[nextIndex];
+  if (!agent) return;
+
+  await openAgentDetail(agent);
+}
+
 // --- Views ---
 
 const views: Record<ViewName, HTMLElement> = {
@@ -197,6 +227,28 @@ getElementById("nav-settings").addEventListener("click", () => {
   state.selectedAgent = null;
   openSettings();
 });
+
+window.addEventListener(
+  "keydown",
+  (e: KeyboardEvent) => {
+    if (isEditableTarget(e.target)) return;
+    if (!e.metaKey || e.altKey || e.ctrlKey || !e.shiftKey) return;
+
+    const isPrevious = e.code === "BracketLeft" || e.key === "{";
+    const isNext = e.code === "BracketRight" || e.key === "}";
+
+    if (isPrevious) {
+      e.preventDefault();
+      e.stopPropagation();
+      void switchAgentByOffset(-1);
+    } else if (isNext) {
+      e.preventDefault();
+      e.stopPropagation();
+      void switchAgentByOffset(1);
+    }
+  },
+  true
+);
 
 // --- Settings: profile list ---
 
