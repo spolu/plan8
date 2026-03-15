@@ -18,12 +18,7 @@ You have access to the filesystem and can run commands.
 Help the user with their tasks.
 `;
 
-const DEFAULT_SETUP = `#!/bin/bash
-# This script runs inside the container after volumes are mounted.
-# Use it to clone repos, install project deps, etc.
-# Example:
-#   cd /agent && git clone git@github.com:org/repo.git
-`;
+const DEFAULT_SETUP = ``;
 
 const DEFAULT_DOCKERFILE = `FROM ubuntu:latest
 
