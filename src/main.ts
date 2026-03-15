@@ -18,6 +18,7 @@ import {
   getProfile,
   saveProfile,
   deleteProfile,
+  linkSkills,
   PROFILES_DIR,
 } from "./profiles";
 
@@ -266,6 +267,9 @@ ipcMain.handle(
     if (!fs.existsSync(agentSubdir)) {
       fs.mkdirSync(agentSubdir, { recursive: true });
     }
+
+    // Symlink profile skills into agent working directory
+    linkSkills(profileId, agentSubdir);
 
     // Run container with built image
     sendToRenderer("container:output", name, "starting container...");

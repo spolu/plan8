@@ -5,6 +5,7 @@ import type { Profile } from "./plan8-api";
 
 const PLAN8_DIR = path.join(os.homedir(), ".plan8");
 export const PROFILES_DIR = path.join(PLAN8_DIR, "profiles");
+export const SKILLS_DIR = path.join(PLAN8_DIR, "skills");
 
 function ensureDir(dir: string): void {
   if (!fs.existsSync(dir)) {
@@ -48,9 +49,11 @@ WORKDIR /agent
 
 export function ensureDefaults(): void {
   ensureDir(PROFILES_DIR);
+  ensureDir(SKILLS_DIR);
   const defaultDir = path.join(PROFILES_DIR, "default");
   const isNew = !fs.existsSync(defaultDir);
   ensureDir(defaultDir);
+  ensureDir(path.join(defaultDir, "skills"));
 
   if (isNew) {
     fs.writeFileSync(
@@ -120,6 +123,31 @@ export function saveProfile(profile: Profile): void {
   );
   fs.writeFileSync(path.join(dir, "prompt.md"), profile.prompt);
   fs.writeFileSync(path.join(dir, "Dockerfile"), profile.dockerfile);
+}
+
+export function linkSkills(profileId: string, agentDir: string): void {
+  const profileSkillsDir = path.join(PROFILES_DIR, profileId, "skills");
+  const targetDir = path.join(agentDir, ".skills");
+
+  ensureDir(targetDir);
+
+  if (!fs.existsSync(profileSkillsDir)) return;
+
+  const entries = fs.readdirSync(profileSkillsDir, { withFileTypes: true });
+  for (const entry of entries) {
+    const src = path.join(profileSkillsDir, entry.name);
+    const dest = path.join(targetDir, entry.name);
+    // Skip if already exists in target
+    if (fs.existsSync(dest)) continue;
+    // Resolve the real path (profile skills may be symlinks into ~/.plan8/skills/)
+    let realSrc = src;
+    try {
+      realSrc = fs.realpathSync(src);
+    } catch {
+      continue; // broken symlink, skip
+    }
+    fs.symlinkSync(realSrc, dest);
+  }
 }
 
 export function deleteProfile(id: string): void {
