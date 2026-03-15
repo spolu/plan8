@@ -232,6 +232,15 @@ ipcMain.handle(
     // Symlink profile skills into agent working directory
     linkSkills(profileId, agentSubdir);
 
+    // Write profile prompt as AGENTS.md so pi picks it up automatically
+    const profile = getProfile(profileId);
+    const agentsmdPath = path.join(agentSubdir, "AGENTS.md");
+    if (profile.prompt.trim()) {
+      fs.writeFileSync(agentsmdPath, profile.prompt);
+    } else if (fs.existsSync(agentsmdPath)) {
+      fs.unlinkSync(agentsmdPath);
+    }
+
     // Run container with built image
     sendToRenderer("container:output", name, "starting container...");
     const args = [
