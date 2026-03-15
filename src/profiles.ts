@@ -36,14 +36,8 @@ RUN curl -fsSL https://deb.nodesource.com/setup_22.x | bash - \\
 # Install pi coding agent
 RUN npm install -g @mariozechner/pi-coding-agent
 
-# Copy credentials (staged at build time, empty defaults if not present)
-RUN mkdir -p /root/.pi/agent /root/.ssh
-COPY auth.json /root/.pi/agent/auth.json
-COPY .gitconfig /root/.gitconfig
-COPY .ssh/ /root/.ssh/
-RUN chmod 700 /root/.ssh && (chmod 600 /root/.ssh/* 2>/dev/null || true)
-
 # Working directory (volume mounted from host, subdirectory created at runtime)
+# Credentials (~/.pi and ~/.ssh) are mounted as volumes at runtime
 WORKDIR /agent
 `;
 
