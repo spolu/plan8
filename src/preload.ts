@@ -1,7 +1,7 @@
 import { contextBridge, ipcRenderer } from "electron";
 import type {
   Plan8API,
-  AgentProfile,
+  Profile,
   ContainerRunOpts,
   ContainerStopOpts,
 } from "./plan8-api";
@@ -11,11 +11,11 @@ const api: Plan8API = {
     check: () => ipcRenderer.invoke("setup:check"),
     openReleases: () => ipcRenderer.invoke("setup:open-releases"),
   },
-  agents: {
-    list: () => ipcRenderer.invoke("agents:list"),
-    get: (id: string) => ipcRenderer.invoke("agents:get", id),
-    save: (agent: AgentProfile) => ipcRenderer.invoke("agents:save", agent),
-    delete: (id: string) => ipcRenderer.invoke("agents:delete", id),
+  profiles: {
+    list: () => ipcRenderer.invoke("profiles:list"),
+    get: (id: string) => ipcRenderer.invoke("profiles:get", id),
+    save: (profile: Profile) => ipcRenderer.invoke("profiles:save", profile),
+    delete: (id: string) => ipcRenderer.invoke("profiles:delete", id),
   },
   container: {
     list: () => ipcRenderer.invoke("container:list"),

@@ -436,11 +436,11 @@ h2 {
   display: block;
 }
 
-#agent-list {
+#profile-list {
   border-top: 1px solid var(--border);
 }
 
-#agent-list .list-item {
+#profile-list .list-item {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -450,7 +450,7 @@ h2 {
   transition: color 0.15s;
 }
 
-#agent-list .list-item:hover {
+#profile-list .list-item:hover {
   color: var(--fg-bright);
 }
 

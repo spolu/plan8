@@ -1,10 +1,10 @@
 import fs from "fs";
 import path from "path";
 import os from "os";
-import type { AgentProfile } from "./plan8-api";
+import type { Profile } from "./plan8-api";
 
 const PLAN8_DIR = path.join(os.homedir(), ".plan8");
-export const AGENTS_DIR = path.join(PLAN8_DIR, "agents");
+export const PROFILES_DIR = path.join(PLAN8_DIR, "profiles");
 
 function ensureDir(dir: string): void {
   if (!fs.existsSync(dir)) {
@@ -59,8 +59,8 @@ WORKDIR /user/\${AGENT_NAME}
 `;
 
 export function ensureDefaults(): void {
-  ensureDir(AGENTS_DIR);
-  const defaultDir = path.join(AGENTS_DIR, "default");
+  ensureDir(PROFILES_DIR);
+  const defaultDir = path.join(PROFILES_DIR, "default");
   const isNew = !fs.existsSync(defaultDir);
   ensureDir(defaultDir);
 
@@ -68,7 +68,7 @@ export function ensureDefaults(): void {
     fs.writeFileSync(
       path.join(defaultDir, "settings.json"),
       JSON.stringify(
-        { name: "default", description: "General-purpose agent" },
+        { description: "General-purpose agent" },
         null,
         2
       )
@@ -80,29 +80,28 @@ export function ensureDefaults(): void {
   fs.writeFileSync(path.join(defaultDir, "Dockerfile"), DEFAULT_DOCKERFILE);
 }
 
-export function listAgents(): AgentProfile[] {
-  ensureDir(AGENTS_DIR);
-  const entries = fs.readdirSync(AGENTS_DIR, { withFileTypes: true });
-  const agents: AgentProfile[] = [];
+export function listProfiles(): Profile[] {
+  ensureDir(PROFILES_DIR);
+  const entries = fs.readdirSync(PROFILES_DIR, { withFileTypes: true });
+  const profiles: Profile[] = [];
   for (const entry of entries) {
     if (!entry.isDirectory()) continue;
     try {
-      agents.push(getAgent(entry.name));
+      profiles.push(getProfile(entry.name));
     } catch {
-      // skip malformed agent dirs
+      // skip malformed profile dirs
     }
   }
-  return agents;
+  return profiles;
 }
 
-export function getAgent(id: string): AgentProfile {
-  const dir = path.join(AGENTS_DIR, id);
+export function getProfile(id: string): Profile {
+  const dir = path.join(PROFILES_DIR, id);
   const settingsPath = path.join(dir, "settings.json");
   const promptPath = path.join(dir, "prompt.md");
   const dockerfilePath = path.join(dir, "Dockerfile");
 
   const settings = JSON.parse(fs.readFileSync(settingsPath, "utf-8")) as {
-    name: string;
     description: string;
   };
   const prompt = fs.existsSync(promptPath)
@@ -114,30 +113,29 @@ export function getAgent(id: string): AgentProfile {
 
   return {
     id,
-    name: settings.name,
     description: settings.description,
     prompt,
     dockerfile,
   };
 }
 
-export function saveAgent(agent: AgentProfile): void {
-  const dir = path.join(AGENTS_DIR, agent.id);
+export function saveProfile(profile: Profile): void {
+  const dir = path.join(PROFILES_DIR, profile.id);
   ensureDir(dir);
   fs.writeFileSync(
     path.join(dir, "settings.json"),
     JSON.stringify(
-      { name: agent.name, description: agent.description },
+      { description: profile.description },
       null,
       2
     )
   );
-  fs.writeFileSync(path.join(dir, "prompt.md"), agent.prompt);
-  fs.writeFileSync(path.join(dir, "Dockerfile"), agent.dockerfile);
+  fs.writeFileSync(path.join(dir, "prompt.md"), profile.prompt);
+  fs.writeFileSync(path.join(dir, "Dockerfile"), profile.dockerfile);
 }
 
-export function deleteAgent(id: string): void {
-  const dir = path.join(AGENTS_DIR, id);
+export function deleteProfile(id: string): void {
+  const dir = path.join(PROFILES_DIR, id);
   if (fs.existsSync(dir)) {
     fs.rmSync(dir, { recursive: true });
   }

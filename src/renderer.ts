@@ -9,13 +9,12 @@ declare const FitAddon: { FitAddon: typeof import("@xterm/addon-fit").FitAddon }
 interface Sandbox {
   name: string;
   image: string;
-  agentId: string;
+  profileId: string;
   prompt: string;
 }
 
-interface AgentProfile {
+interface Profile {
   id: string;
-  name: string;
   description: string;
   prompt: string;
   dockerfile: string;
@@ -25,25 +24,25 @@ type ViewName =
   | "setup"
   | "empty"
   | "settings"
-  | "agent-editor"
+  | "profile-editor"
   | "sandbox-detail";
 
 // --- State ---
 
 const state: {
   sandboxes: Sandbox[];
-  agents: AgentProfile[];
+  profiles: Profile[];
   currentView: ViewName;
   selectedSandbox: Sandbox | null;
-  editingAgent: AgentProfile | null;
+  editingProfile: Profile | null;
   ready: boolean;
   pollTimer: ReturnType<typeof setInterval> | null;
 } = {
   sandboxes: [],
-  agents: [],
+  profiles: [],
   currentView: "setup",
   selectedSandbox: null,
-  editingAgent: null,
+  editingProfile: null,
   ready: false,
   pollTimer: null,
 };
@@ -76,7 +75,7 @@ const views: Record<ViewName, HTMLElement> = {
   setup: getElementById("view-setup"),
   empty: getElementById("view-empty"),
   settings: getElementById("view-settings"),
-  "agent-editor": getElementById("view-agent-editor"),
+  "profile-editor": getElementById("view-profile-editor"),
   "sandbox-detail": getElementById("view-sandbox-detail"),
 };
 
@@ -100,7 +99,7 @@ function showView(name: ViewName): void {
   if (settingsNav)
     settingsNav.classList.toggle(
       "active",
-      name === "settings" || name === "agent-editor"
+      name === "settings" || name === "profile-editor"
     );
 
   // Fit terminal when switching to sandbox detail
@@ -185,7 +184,7 @@ async function runSetup(): Promise<void> {
 async function enterApp(): Promise<void> {
   stopPolling();
   state.ready = true;
-  state.agents = await window.plan8.agents.list();
+  state.profiles = await window.plan8.profiles.list();
   showView("empty");
   getElementById("app").classList.add("loaded");
   refresh();
@@ -199,27 +198,27 @@ getElementById("nav-settings").addEventListener("click", () => {
   openSettings();
 });
 
-// --- Settings: agent list ---
+// --- Settings: profile list ---
 
 async function openSettings(): Promise<void> {
-  state.agents = await window.plan8.agents.list();
-  renderAgentList();
+  state.profiles = await window.plan8.profiles.list();
+  renderProfileList();
   showView("settings");
 }
 
-function renderAgentList(): void {
-  const list = getElementById("agent-list");
-  if (state.agents.length === 0) {
-    list.innerHTML = '<div class="empty">no agents configured</div>';
+function renderProfileList(): void {
+  const list = getElementById("profile-list");
+  if (state.profiles.length === 0) {
+    list.innerHTML = '<div class="empty">no profiles configured</div>';
     return;
   }
-  list.innerHTML = state.agents
+  list.innerHTML = state.profiles
     .map(
-      (a) => `
-    <div class="list-item" data-id="${a.id}">
+      (p) => `
+    <div class="list-item" data-id="${p.id}">
       <div>
-        <span class="name">${a.name}</span>
-        <span class="meta">${a.description}</span>
+        <span class="name">${p.id}</span>
+        <span class="meta">${p.description}</span>
       </div>
     </div>
   `
@@ -227,17 +226,16 @@ function renderAgentList(): void {
     .join("");
   list.querySelectorAll<HTMLElement>(".list-item").forEach((el) => {
     el.addEventListener("click", () => {
-      const agent = state.agents.find((a) => a.id === el.dataset.id);
-      if (agent) openAgentEditor(agent, false);
+      const profile = state.profiles.find((p) => p.id === el.dataset.id);
+      if (profile) openProfileEditor(profile, false);
     });
   });
 }
 
-getElementById("btn-new-agent").addEventListener("click", () => {
-  openAgentEditor(
+getElementById("btn-new-profile").addEventListener("click", () => {
+  openProfileEditor(
     {
       id: "",
-      name: "",
       description: "",
       prompt: "",
       dockerfile: "FROM ubuntu:latest\n",
@@ -246,37 +244,35 @@ getElementById("btn-new-agent").addEventListener("click", () => {
   );
 });
 
-// --- Agent editor ---
+// --- Profile editor ---
 
-function openAgentEditor(agent: AgentProfile, isNew: boolean): void {
-  state.editingAgent = { ...agent };
+function openProfileEditor(profile: Profile, isNew: boolean): void {
+  state.editingProfile = { ...profile };
   const idInput = getElementById<HTMLInputElement>("editor-id");
   getElementById("editor-title").textContent = isNew
-    ? "new agent"
-    : agent.name;
-  idInput.value = agent.id;
+    ? "new profile"
+    : profile.id;
+  idInput.value = profile.id;
   idInput.readOnly = !isNew;
   idInput.classList.toggle("readonly", !isNew);
-  getElementById<HTMLInputElement>("editor-name").value = agent.name;
   getElementById<HTMLInputElement>("editor-description").value =
-    agent.description;
-  getElementById<HTMLTextAreaElement>("editor-prompt").value = agent.prompt;
+    profile.description;
+  getElementById<HTMLTextAreaElement>("editor-prompt").value = profile.prompt;
   getElementById<HTMLTextAreaElement>("editor-dockerfile").value =
-    agent.dockerfile;
+    profile.dockerfile;
 
-  const deleteBtn = getElementById("btn-delete-agent");
+  const deleteBtn = getElementById("btn-delete-profile");
   deleteBtn.style.display = isNew ? "none" : "inline-block";
 
-  showView("agent-editor");
+  showView("profile-editor");
 }
 
 getElementById("btn-back-settings").addEventListener("click", () => {
   openSettings();
 });
 
-getElementById("btn-save-agent").addEventListener("click", async () => {
+getElementById("btn-save-profile").addEventListener("click", async () => {
   const id = getElementById<HTMLInputElement>("editor-id").value.trim();
-  const name = getElementById<HTMLInputElement>("editor-name").value.trim();
   const description = getElementById<HTMLInputElement>(
     "editor-description"
   ).value.trim();
@@ -284,16 +280,16 @@ getElementById("btn-save-agent").addEventListener("click", async () => {
   const dockerfile =
     getElementById<HTMLTextAreaElement>("editor-dockerfile").value;
 
-  if (!id || !name) return;
+  if (!id) return;
 
-  await window.plan8.agents.save({ id, name, description, prompt, dockerfile });
+  await window.plan8.profiles.save({ id, description, prompt, dockerfile });
   await openSettings();
 });
 
-getElementById("btn-delete-agent").addEventListener("click", async () => {
-  if (!state.editingAgent || !state.editingAgent.id) return;
-  if (state.editingAgent.id === "default") return;
-  await window.plan8.agents.delete(state.editingAgent.id);
+getElementById("btn-delete-profile").addEventListener("click", async () => {
+  if (!state.editingProfile || !state.editingProfile.id) return;
+  if (state.editingProfile.id === "default") return;
+  await window.plan8.profiles.delete(state.editingProfile.id);
   await openSettings();
 });
 
@@ -404,7 +400,7 @@ function switchSession(sandboxName: string, session: "agent" | "shell"): void {
 async function openSandboxDetail(sandbox: Sandbox): Promise<void> {
   state.selectedSandbox = sandbox;
   getElementById("detail-name").textContent = sandbox.name;
-  getElementById("detail-agent-label").textContent = sandbox.agentId;
+  getElementById("detail-profile-label").textContent = sandbox.profileId;
 
   const session = activeSession.get(sandbox.name) || "agent";
   const key = terminalKey(sandbox.name, session);
@@ -518,15 +514,15 @@ getElementById("session-tabs").addEventListener("click", (e: MouseEvent) => {
 
 getElementById("btn-new-sandbox").addEventListener("click", async () => {
   if (!state.ready) return;
-  state.agents = await window.plan8.agents.list();
+  state.profiles = await window.plan8.profiles.list();
   showNewSandboxModal();
 });
 
 function showNewSandboxModal(): void {
-  const options = state.agents
+  const options = state.profiles
     .map(
-      (a) =>
-        `<option value="${a.id}">${a.name} — ${a.description}</option>`
+      (p) =>
+        `<option value="${p.id}">${p.id} — ${p.description}</option>`
     )
     .join("");
 
@@ -540,8 +536,8 @@ function showNewSandboxModal(): void {
         <input id="modal-name" type="text" placeholder="my-sandbox" autocomplete="off" />
       </div>
       <div class="field">
-        <label>agent</label>
-        <select id="modal-agent">${options}</select>
+        <label>profile</label>
+        <select id="modal-profile">${options}</select>
       </div>
       <div class="modal-actions">
         <button class="btn" id="modal-cancel">cancel</button>
@@ -564,18 +560,18 @@ function showNewSandboxModal(): void {
     ).value.trim();
     // Sanitize: lowercase, replace spaces/invalid chars with dashes
     const name = rawName.toLowerCase().replace(/[^a-z0-9._-]/g, "-");
-    const agentId = (overlay.querySelector("#modal-agent") as HTMLSelectElement)
+    const profileId = (overlay.querySelector("#modal-profile") as HTMLSelectElement)
       .value;
-    if (!name || !agentId) return;
+    if (!name || !profileId) return;
 
-    const agent = state.agents.find((a) => a.id === agentId);
-    if (!agent) return;
+    const profile = state.profiles.find((p) => p.id === profileId);
+    if (!profile) return;
 
     const sandbox: Sandbox = {
       name,
       image: "ubuntu:latest",
-      agentId,
-      prompt: agent.prompt,
+      profileId,
+      prompt: profile.prompt,
     };
     state.sandboxes.push(sandbox);
     renderSandboxList();
@@ -591,7 +587,7 @@ function showNewSandboxModal(): void {
       await window.plan8.container.run({
         name,
         image: "ubuntu:latest",
-        agentId,
+        profileId,
       });
 
       if (entry) entry.term.writeln("sandbox ready. starting harness...\r\n");
@@ -721,7 +717,7 @@ async function refresh(): Promise<void> {
           return {
             name: id,
             image: imageRef ?? "",
-            agentId: labels?.["plan8.agent"] ?? "",
+            profileId: labels?.["plan8.profile"] ?? "",
             prompt: "",
           };
         });

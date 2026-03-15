@@ -7,19 +7,19 @@ import { updateElectronApp } from "update-electron-app";
 import * as pty from "node-pty";
 import type {
   SetupCheckResult,
-  AgentProfile,
+  Profile,
   ContainerRunOpts,
   ContainerStopOpts,
   ContainerListEntry,
 } from "./plan8-api";
 import {
   ensureDefaults,
-  listAgents,
-  getAgent,
-  saveAgent,
-  deleteAgent,
-  AGENTS_DIR,
-} from "./agents";
+  listProfiles,
+  getProfile,
+  saveProfile,
+  deleteProfile,
+  PROFILES_DIR,
+} from "./profiles";
 
 let mainWindow: BrowserWindow | null = null;
 
@@ -96,26 +96,26 @@ ipcMain.handle("setup:open-releases", async (): Promise<void> => {
   shell.openExternal("https://github.com/apple/container/releases/latest");
 });
 
-// --- Agent profiles ---
+// --- Profiles ---
 
 ipcMain.handle(
-  "agents:list",
-  async (): Promise<AgentProfile[]> => listAgents()
+  "profiles:list",
+  async (): Promise<Profile[]> => listProfiles()
 );
 
 ipcMain.handle(
-  "agents:get",
-  async (_event, id: string): Promise<AgentProfile> => getAgent(id)
+  "profiles:get",
+  async (_event, id: string): Promise<Profile> => getProfile(id)
 );
 
 ipcMain.handle(
-  "agents:save",
-  async (_event, agent: AgentProfile): Promise<void> => saveAgent(agent)
+  "profiles:save",
+  async (_event, profile: Profile): Promise<void> => saveProfile(profile)
 );
 
 ipcMain.handle(
-  "agents:delete",
-  async (_event, id: string): Promise<void> => deleteAgent(id)
+  "profiles:delete",
+  async (_event, id: string): Promise<void> => deleteProfile(id)
 );
 
 // --- Container management via apple/container CLI ---
@@ -204,10 +204,10 @@ ipcMain.handle(
   "container:run",
   async (
     _event,
-    { name, agentId, volume }: ContainerRunOpts
+    { name, profileId, volume }: ContainerRunOpts
   ): Promise<string> => {
-    const imageName = `plan8-${agentId}`;
-    const dockerfileDir = path.join(AGENTS_DIR, agentId);
+    const imageName = `plan8-${profileId}`;
+    const dockerfileDir = path.join(PROFILES_DIR, profileId);
 
     // Stage credentials into build context
     const staged: string[] = [];
@@ -242,8 +242,8 @@ ipcMain.handle(
       ""
     );
 
-    // Build agent image from Dockerfile
-    sendToRenderer("container:output", name, "building agent image...");
+    // Build profile image from Dockerfile
+    sendToRenderer("container:output", name, "building profile image...");
     try {
       await spawnStreaming(name, CONTAINER, [
         "build",
@@ -271,7 +271,7 @@ ipcMain.handle(
     const args = [
       "run", "-d", "--init", "--name", name,
       "--label", "plan8=true",
-      "--label", `plan8.agent=${agentId}`,
+      "--label", `plan8.profile=${profileId}`,
     ];
     if (volume) args.push("--volume", volume);
     args.push(imageName, "sleep", "infinity");

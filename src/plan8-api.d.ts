@@ -5,9 +5,8 @@ export interface SetupCheckResult {
   version?: string | null;
 }
 
-export interface AgentProfile {
+export interface Profile {
   id: string;
-  name: string;
   description: string;
   prompt: string;
   dockerfile: string;
@@ -16,7 +15,7 @@ export interface AgentProfile {
 export interface ContainerRunOpts {
   image: string;
   name: string;
-  agentId: string;
+  profileId: string;
   volume?: string;
 }
 
@@ -37,10 +36,10 @@ export interface Plan8API {
     check: () => Promise<SetupCheckResult>;
     openReleases: () => Promise<void>;
   };
-  agents: {
-    list: () => Promise<AgentProfile[]>;
-    get: (id: string) => Promise<AgentProfile>;
-    save: (agent: AgentProfile) => Promise<void>;
+  profiles: {
+    list: () => Promise<Profile[]>;
+    get: (id: string) => Promise<Profile>;
+    save: (profile: Profile) => Promise<void>;
     delete: (id: string) => Promise<void>;
   };
   container: {

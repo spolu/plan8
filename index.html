@@ -44,30 +44,26 @@
         <!-- settings view -->
         <section id="view-settings" class="view">
           <div class="panel-header">
-            <h1>agents</h1>
-            <button id="btn-new-agent" class="btn">+ new agent</button>
+            <h1>profiles</h1>
+            <button id="btn-new-profile" class="btn">+ new profile</button>
           </div>
           <div class="panel-body">
-            <div id="agent-list"></div>
+            <div id="profile-list"></div>
           </div>
         </section>
 
-        <!-- agent editor view -->
-        <section id="view-agent-editor" class="view">
+        <!-- profile editor view -->
+        <section id="view-profile-editor" class="view">
           <div class="panel-header">
             <button id="btn-back-settings" class="btn">&larr; back</button>
             <h1 id="editor-title"></h1>
-            <button id="btn-save-agent" class="btn">save</button>
-            <button id="btn-delete-agent" class="btn btn-danger">delete</button>
+            <button id="btn-save-profile" class="btn">save</button>
+            <button id="btn-delete-profile" class="btn btn-danger">delete</button>
           </div>
           <div class="panel-body">
             <div class="field">
               <label>id</label>
-              <input id="editor-id" type="text" placeholder="my-agent" autocomplete="off" />
-            </div>
-            <div class="field">
-              <label>name</label>
-              <input id="editor-name" type="text" placeholder="My Agent" autocomplete="off" />
+              <input id="editor-id" type="text" placeholder="my-profile" autocomplete="off" />
             </div>
             <div class="field">
               <label>description</label>
@@ -88,7 +84,7 @@
         <section id="view-sandbox-detail" class="view">
           <div class="panel-header">
             <h1 id="detail-name"></h1>
-            <span id="detail-agent-label" class="meta-label"></span>
+            <span id="detail-profile-label" class="meta-label"></span>
             <button id="btn-connect" class="btn">connect</button>
             <button id="btn-stop" class="btn btn-danger">stop</button>
           </div>
