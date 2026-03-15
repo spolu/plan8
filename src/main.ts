@@ -236,11 +236,6 @@ ipcMain.handle(
     stageFile(path.join(home, ".pi", "agent", "auth.json"), "auth.json", "{}");
     stageFile(path.join(home, ".gitconfig"), ".gitconfig", "");
     stageDir(path.join(home, ".ssh"), ".ssh");
-    stageFile(
-      path.join(home, ".config", "gh", "hosts.yml"),
-      "gh_hosts.yml",
-      ""
-    );
 
     // Build profile image from Dockerfile
     sendToRenderer("container:output", name, "building profile image...");
