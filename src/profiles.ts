@@ -60,7 +60,7 @@ export function ensureDefaults(): void {
         2
       )
     );
-    fs.writeFileSync(path.join(defaultDir, "prompt.md"), DEFAULT_PROMPT);
+    fs.writeFileSync(path.join(defaultDir, "AGENTS.md"), DEFAULT_PROMPT);
     fs.writeFileSync(path.join(defaultDir, "setup.sh"), DEFAULT_SETUP);
   }
 
@@ -86,7 +86,7 @@ export function listProfiles(): Profile[] {
 export function getProfile(id: string): Profile {
   const dir = path.join(PROFILES_DIR, id);
   const settingsPath = path.join(dir, "settings.json");
-  const promptPath = path.join(dir, "prompt.md");
+  const promptPath = path.join(dir, "AGENTS.md");
   const dockerfilePath = path.join(dir, "Dockerfile");
   const setupPath = path.join(dir, "setup.sh");
 
@@ -123,7 +123,7 @@ export function saveProfile(profile: Profile): void {
       2
     )
   );
-  fs.writeFileSync(path.join(dir, "prompt.md"), profile.prompt);
+  fs.writeFileSync(path.join(dir, "AGENTS.md"), profile.prompt);
   fs.writeFileSync(path.join(dir, "Dockerfile"), profile.dockerfile);
   fs.writeFileSync(path.join(dir, "setup.sh"), profile.setup);
 }
