@@ -278,6 +278,7 @@ ipcMain.handle(
       "--label", "plan8=true",
       "--label", `plan8.profile=${profileId}`,
       "--volume", `${fsRoot}:/agent`,
+      "--volume", `${os.homedir()}:/user/${os.userInfo().username}`,
     ];
     if (volume) args.push("--volume", volume);
     args.push(imageName, "sleep", "infinity");
