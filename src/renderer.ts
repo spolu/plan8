@@ -233,6 +233,15 @@ window.addEventListener(
   "keydown",
   (e: KeyboardEvent) => {
     if (isEditableTarget(e.target)) return;
+    if (!state.ready) return;
+
+    if (e.metaKey && !e.altKey && !e.ctrlKey && !e.shiftKey && e.key.toLowerCase() === "n") {
+      e.preventDefault();
+      e.stopPropagation();
+      void openNewAgentModal();
+      return;
+    }
+
     if (!e.metaKey || e.altKey || e.ctrlKey || !e.shiftKey) return;
 
     const isPrevious = e.code === "BracketLeft" || e.key === "{";
@@ -566,11 +575,15 @@ getElementById("btn-sandbox").addEventListener("click", async () => {
 
 // --- New agent modal ---
 
-getElementById("btn-new-agent").addEventListener("click", async () => {
+getElementById("btn-new-agent").addEventListener("click", () => {
+  void openNewAgentModal();
+});
+
+async function openNewAgentModal(): Promise<void> {
   if (!state.ready) return;
   state.profiles = await window.plan8.profiles.list();
   showNewAgentModal();
-});
+}
 
 function showNewAgentModal(): void {
   const options = state.profiles
