@@ -1,6 +1,6 @@
 # plan8
 
-Agent orchestration desktop app built with Electron. Spin up isolated AI coding agents inside [apple/container](https://github.com/apple/container) Linux containers, each with its own terminal, profile, and shared filesystem.
+Explorative agent orchestration desktop app built with Electron. Spin up isolated AI coding agents inside [apple/container](https://github.com/apple/container) Linux containers, each with its own terminal, profile, and shared filesystem.
 
 ## Prerequisites
 
