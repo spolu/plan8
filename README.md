@@ -8,6 +8,8 @@
 
 Explorative agent orchestration desktop app built with Electron. Spin up isolated AI coding agents inside [apple/container](https://github.com/apple/container) Linux containers, each with its own terminal, profile, and shared filesystem. Where Plan 9 gave every resource a file, plan8 gives every agent a sandbox.
 
+<img width="1214" height="814" alt="Screenshot 2026-03-16 at 20 05 06" src="https://github.com/user-attachments/assets/fe69c1c5-887b-4126-be6c-bedc88b6f008" />
+
 ## Prerequisites
 
 - **macOS** with [apple/container](https://github.com/apple/container/releases/latest) installed and running
