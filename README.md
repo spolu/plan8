@@ -3,9 +3,8 @@
        / _ \/ /__ ____    ( _ )
       / ___/ / _ `/ _ \  / _  |
      /_/  /_/\_,_/_//_/  \___/
-```
 
-# plan8
+```
 
 Explorative agent orchestration desktop app built with Electron. Spin up isolated AI coding agents inside [apple/container](https://github.com/apple/container) Linux containers, each with its own terminal, profile, and shared filesystem. Where Plan 9 gave every resource a file, plan8 gives every agent a sandbox.
 
