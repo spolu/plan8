@@ -235,7 +235,7 @@ window.addEventListener(
     if (isEditableTarget(e.target)) return;
     if (!state.ready) return;
 
-    if (e.metaKey && !e.altKey && !e.ctrlKey && !e.shiftKey && e.key.toLowerCase() === "t") {
+    if (e.metaKey && !e.altKey && !e.ctrlKey && !e.shiftKey && e.key.toLowerCase() === "n") {
       e.preventDefault();
       e.stopPropagation();
       void openNewAgentModal();
