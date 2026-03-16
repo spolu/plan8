@@ -263,7 +263,7 @@ ipcMain.handle(
       if (setupContent) {
         sendToRenderer("container:output", name, "running setup script...");
         await spawnStreaming(name, CONTAINER, [
-          "exec", name, "bash", "-c", setupContent,
+          "exec", "-w", `/agent/${name}`, name, "bash", "-c", setupContent,
         ]);
       }
     }
