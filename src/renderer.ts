@@ -588,6 +588,7 @@ function showNewAgentModal(): void {
       <div class="field">
         <label>name</label>
         <input id="modal-name" type="text" placeholder="my-agent" autocomplete="off" />
+        <p class="field-error" id="modal-name-error"></p>
       </div>
       <div class="field">
         <label>profile</label>
@@ -610,6 +611,8 @@ function showNewAgentModal(): void {
     if (e.target === overlay) overlay.remove();
   });
 
+  const nameError = overlay.querySelector("#modal-name-error") as HTMLParagraphElement;
+
   const submitNewAgent = async (): Promise<void> => {
     const rawName = nameInput.value.trim();
     // Sanitize: lowercase, replace spaces/invalid chars with dashes
@@ -617,6 +620,14 @@ function showNewAgentModal(): void {
     const profileId = (overlay.querySelector("#modal-profile") as HTMLSelectElement)
       .value;
     if (!name || !profileId) return;
+
+    // Reject names that collide with a currently-running agent
+    if (state.agents.some((a) => a.name === name)) {
+      nameError.textContent = `an agent named "${name}" is already running`;
+      nameInput.focus();
+      return;
+    }
+    nameError.textContent = "";
 
     const profile = state.profiles.find((p) => p.id === profileId);
     if (!profile) return;
